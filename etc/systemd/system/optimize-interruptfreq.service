@@ -2,8 +2,8 @@
 Description=Increase the highest requested RTC interrupt frequency
 
 [Service]
-ExecStart=echo 2560 > /sys/class/rtc/rtc0/max_user_freq
-ExecStart=echo 2560 > /proc/sys/dev/hpet/max-user-freq
+ExecStart=echo 3072 > /sys/class/rtc/rtc0/max_user_freq
+ExecStart=echo 3072 > /proc/sys/dev/hpet/max-user-freq
 
 [Install]
 WantedBy=multi-user.target
