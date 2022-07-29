@@ -2,6 +2,7 @@
 Description=Adjust latency timer for PCI peripherals
 
 [Service]
+Type=oneshot
 ExecStart=/usr/bin/setpci -v -s '*:*' latency_timer=20
 ExecStart=/usr/bin/setpci -v -s '0:0' latency_timer=0
 
