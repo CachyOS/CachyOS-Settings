@@ -4,7 +4,7 @@ ConditionPathExists=/sys/kernel/mm/ksm/ksmd_status
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c /usr/bin/ksmd
+ExecStart=/bin/bash -c '/bin/echo 8 > /sys/kernel/mm/ksm/run'
 
 [Install]
 WantedBy=multi-user.target
