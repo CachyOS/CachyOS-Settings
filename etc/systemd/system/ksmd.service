@@ -4,7 +4,7 @@ ConditionPathExists=/sys/kernel/mm/ksm/ksmd_status
 
 [Service]
 Type=forking
-ExecStart=/bin/bash -c /usr/local/bin/ksmd
+ExecStart=/bin/bash -c /usr/bin/ksmd
 
 [Install]
 WantedBy=multi-user.target
