@@ -1,0 +1,2 @@
+#!/bin/bash
+echo 8 > /sys/kernel/mm/ksm/run

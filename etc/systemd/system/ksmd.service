@@ -1,0 +1,11 @@
+[Unit]
+Description=Enable ksmd auto-run mode
+ConditionPathExists=/sys/kernel/mm/ksm/ksmd_status
+
+[Service]
+Type=forking
+ExecStart=/bin/bash -c /usr/local/bin/ksmd
+
+[Install]
+WantedBy=multi-user.target
+
