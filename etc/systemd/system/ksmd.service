@@ -3,7 +3,7 @@ Description=Enable ksmd auto-run mode
 ConditionPathExists=/sys/kernel/mm/ksm/ksmd_status
 
 [Service]
-Type=forking
+Type=oneshot
 ExecStart=/bin/bash -c /usr/bin/ksmd
 
 [Install]
