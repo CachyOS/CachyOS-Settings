@@ -1,0 +1,12 @@
+[Unit]
+Description=Enable BORE optimize settings
+ConditionPathExists=/sys/kernel/debug/sched/burst_preempt
+ConditionPathExists=/sys/kernel/debug/sched/burst_reduction
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c /usr/bin/optimize-bore.sh
+
+[Install]
+WantedBy=multi-user.target
+
