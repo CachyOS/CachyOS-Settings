@@ -1,29 +1,28 @@
 #!/bin/sh
 ## Tune some cfs values
 ## usage:
-## tunecfs 0 for default cfs settings
-## tunecfs 1 for Cachyos/BORE traditional settings
-## tunecfs 2 for BORE experimental settings
+## tunecfs classic for default cfs settings
+## tunecfs default for Cachyos/BORE traditional settings
+## tunecfs experimental for BORE experimental settings
 
 if [ $# -ne 0 ]; then
-    if [ $1 -eq 0 ]; then
-        echo "Applying: Vanilla default values"
-        echo        1 | sudo tee /sys/kernel/debug/sched/tunable_scaling
-        echo  6000000 | sudo tee /sys/kernel/debug/sched/latency_ns
-        echo   750000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
-        echo  1000000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
-    elif [ $1 -eq 1 ]; then
-        echo "Cachy/BORE traditional values"
-        echo        1 | sudo tee /sys/kernel/debug/sched/tunable_scaling
-        echo  4000000 | sudo tee /sys/kernel/debug/sched/latency_ns
-        echo   500000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
-        echo   800000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
-    elif [ $1 -eq 2 ]; then
-        echo "BORE experimental constant values"
-        echo        0 | sudo tee /sys/kernel/debug/sched/tunable_scaling
-        echo 16000000 | sudo tee /sys/kernel/debug/sched/latency_ns
-        echo   800000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
-        echo  8000000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
-    fi
+	if [ "$1" = "classic" ]; then
+		echo "Applying: Vanilla default values"
+		echo        1 | sudo tee /sys/kernel/debug/sched/tunable_scaling
+		echo  6000000 | sudo tee /sys/kernel/debug/sched/latency_ns
+		echo   750000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
+		echo  1000000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
+	elif [ "$1" = "default" ]; then
+		echo "Applying: Cachy/BORE traditional values"
+		echo        1 | sudo tee /sys/kernel/debug/sched/tunable_scaling
+		echo  4000000 | sudo tee /sys/kernel/debug/sched/latency_ns
+		echo   500000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
+		echo   800000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
+	elif [ "$1" = "experimental" ]; then
+		echo "Applying: BORE experimental constant values"
+		echo        0 | sudo tee /sys/kernel/debug/sched/tunable_scaling
+		echo 16000000 | sudo tee /sys/kernel/debug/sched/latency_ns
+		echo   800000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
+		echo  8000000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
+	fi
 fi
-
