@@ -1,9 +1,0 @@
-[Unit]
-Description=Run ksmd auto-run mode
-
-[Timer]
-OnBootSec=15sec
-Unit=ksmd.service
-
-[Install]
-WantedBy=multi-user.target
