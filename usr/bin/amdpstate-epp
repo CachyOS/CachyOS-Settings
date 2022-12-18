@@ -1,0 +1,8 @@
+#!/bin/bash
+
+## Set gov to powersave to use EPP
+sudo cpupower frequency-set -g powersave
+## Enable dynamic boost
+echo 1 | sudo tee /sys/devices/system/cpu/amd-pstate/cppc_dynamic_boost
+## Use the power preference
+echo power | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference
