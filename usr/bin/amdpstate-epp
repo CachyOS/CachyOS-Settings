@@ -1,5 +1,7 @@
 #!/bin/bash
 
+## Set amd-pstate to active, to enable amd-pstate-epp
+echo active | sudo tee /sys/devices/system/cpu/amd_pstate/status 
 ## Set gov to powersave to use EPP
 sudo cpupower frequency-set -g powersave
 ## Use the power preference
