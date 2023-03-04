@@ -1,0 +1,2 @@
+ACTION=="add", KERNEL=="zram[0-9]*", ATTR{recomp_algorithm}=="", ATTR{recomp_algorithm}="algo=lz4 priority=1"
+IMPORT{program}="/sbin/sh -c \"echo \"type=idle\" > /sys/block/zram*/recompress\""
