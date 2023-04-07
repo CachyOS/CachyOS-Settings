@@ -3,7 +3,7 @@
 ## usage:
 ## tunecfs classic for default cfs settings
 ## tunecfs default for Cachyos/BORE traditional settings
-## tunecfs experimental for BORE experimental settings
+## tunecfs bore for bore optimized settings
 
 if [ $# -ne 0 ]; then
 	if [ "$1" = "classic" ]; then
@@ -22,7 +22,7 @@ if [ $# -ne 0 ]; then
 		echo "Applying: BORE experimental constant values"
 		echo        0 | sudo tee /sys/kernel/debug/sched/tunable_scaling
 		echo 16000000 | sudo tee /sys/kernel/debug/sched/latency_ns
-		echo   800000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
-		echo  8000000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
+		echo 1600000  | sudo tee /sys/kernel/debug/sched/min_granularity_ns
+		echo  9600000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
 	fi
 fi
