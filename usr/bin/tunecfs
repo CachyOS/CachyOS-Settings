@@ -18,7 +18,7 @@ if [ $# -ne 0 ]; then
 		echo  4000000 | sudo tee /sys/kernel/debug/sched/latency_ns
 		echo   500000 | sudo tee /sys/kernel/debug/sched/min_granularity_ns
 		echo   800000 | sudo tee /sys/kernel/debug/sched/wakeup_granularity_ns
-	elif [ "$1" = "experimental" ]; then
+	elif [ "$1" = "bore" ]; then
 		echo "Applying: BORE experimental constant values"
 		echo        0 | sudo tee /sys/kernel/debug/sched/tunable_scaling
 		echo 16000000 | sudo tee /sys/kernel/debug/sched/latency_ns
