@@ -1,10 +1,9 @@
 [Unit]
-Description=Adjust latency timer for PCI peripherals
+Description=Adjust latency timers for PCI peripherals
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/setpci -v -s '*:*' latency_timer=20
-ExecStart=/usr/bin/setpci -v -s '0:0' latency_timer=0
+ExecStart=/usr/bin/pci-latency
 
 [Install]
 WantedBy=multi-user.target
