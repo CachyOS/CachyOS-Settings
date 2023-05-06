@@ -1,15 +1,59 @@
-#!/bin/bash
+#!/usr/bin/env lua
+local lfs = require 'lfs'
 
-TOP=$( [ -z $1 ] && echo 10 || echo $1)
+-- Patterns
+local pid_pattern = "[0-9]+"
+local proc_name_pattern = "Name:%s*(.+)"
+local vm_rss_pattern = "VmRSS:%s*([0-9]+)"
+local vm_swap_pattern = "VmSwap:%s*([0-9]+)"
 
-declare -a mem=($(ps -e -orss=,args= | awk '{print $1 " " $2 }' | awk '{tot[$2]+=$1;count[$2]++} END {for (i in tot) {print tot[i],i,count[i]}}' | sort -n | tail -n $TOP | sort -nr | awk '{hr=$1/1024; printf("%13.2fM|%s", hr, $2)}' | tr '\n' ' '))
-declare -a swp=($(cat /proc/*/status | grep -E 'VmSwap:|Name:' | grep -B1 'VmSwap' | cut -d':' -f2 | grep -v -- '--' | grep -o -E '[a-zA-Z0-9]+.*$' | cut -d' ' -f1 | xargs -n2 echo | sort -hrk2 | awk '{hr=$2/1024; if (hr>0) printf("%13.2fM|%s", hr,$1)}' | tr '\n' ' '))
+local function get_process_values(path)
+    local name, rss, swap
+    for line in io.lines(path) do
+        if name == nil then
+            name = line:match(proc_name_pattern)
+        elseif rss == nil then
+            rss = line:match(vm_rss_pattern)
+        elseif swap == nil then
+            swap = line:match(vm_swap_pattern)
+        else
+            break
+        end
+    end
+    return name, rss, swap
+end
+
+local function get_process_map()
+    local map = {}
+    for pid in lfs.dir("/proc/") do
+        if pid:match(pid_pattern) then
+            local f = table.concat({"/proc", pid}, "/")
+            local attr = lfs.attributes(f)
+            assert (type(attr) == "table")
+
+            if attr.mode == "directory" then
+                local name, rss, swap = get_process_values(table.concat({f, "status"}, "/"))
+                if name and rss then
+                    map[#map+1] = { tonumber(rss), tonumber(swap), name }
+                end
+            end
+        end
+    end
+    table.sort(map, function (a, b) return (a[1] > b[1]) end)
+    return map
+end
 
 
-printf "%-9s %35s %-9s %20s\n" "MEMORY" "Top $TOP processes       " "SWAP" ""
-for (( j=0; j<${#mem[@]}; j++ ));
-do
-  printf "%9s %-35s %9s %-20s\n" $(echo ${mem[$j]} | sed 's/|/ /;s/usr\///;s/bin\///;s/lib\///;s/\///') $(echo ${swp[$j]} | sed 's/|/ /')
-done
-echo
-printf "%9s %-35s %9s %-20s\n" $(free -m | awk '/Mem/{print($3"M "$1)}'| sed 's/Mem:/MemTotal/') $(free -m | awk '/Swap/{print($3"M "$1)}' | sed 's/Swap:/SwapTotal/')
+local function printTop(size)
+    size = size or 10
+    local map = get_process_map()
+    print(string.format("%-9s %35s %-9s %20s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", ""))
+    for i = 1, size do
+        local entry = map[i]
+        if entry then
+                print(string.format("%-9s %-35s %-9s", tonumber(string.format("%.0f", entry[1] / 1024)) .. "M", entry[3], tonumber(string.format("%.0f", entry[2] / 1024)) .. "M"))
+        end
+    end
+end
+
+printTop(arg[1])
