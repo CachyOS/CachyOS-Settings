@@ -23,9 +23,8 @@ local function get_process_values(path)
     return name, rss, swap
 end
 
-local function get_process_maps()
-    local swap_map = {}
-    local ram_map = {}
+local function get_process_map()
+    local map = {}
     for pid in lfs.dir("/proc/") do
         if pid:match(pid_pattern) then
             local f = table.concat({"/proc", pid}, "/")
@@ -35,27 +34,24 @@ local function get_process_maps()
             if attr.mode == "directory" then
                 local name, rss, swap = get_process_values(table.concat({f, "status"}, "/"))
                 if name and rss then
-                    swap_map[#swap_map+1] = { tonumber(swap), name }
-                    ram_map[#ram_map+1] = { tonumber(rss), name }
+                    map[#map+1] = { tonumber(rss), tonumber(swap), name }
                 end
             end
         end
     end
-    table.sort(ram_map, function (a, b) return (a[1] > b[1]) end)
-    table.sort(swap_map, function (a, b) return (a[1] > b[1]) end)
-    return ram_map, swap_map
+    table.sort(map, function (a, b) return (a[1] > b[1]) end)
+    return map
 end
 
 
 local function printTop(size)
     size = size or 10
-    local ram_map, swap_map = get_process_maps()
+    local map = get_process_map()
     print(string.format("%-9s %35s %-9s %20s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", ""))
     for i = 1, size do
-        local ram_entry = ram_map[i]
-        local swap_entry = swap_map[i]
-        if ram_entry then
-                print(string.format("%-9s %-35s %-9s %-20s", tonumber(string.format("%.0f", ram_entry[1] / 1024)) .. "M", ram_entry[2], tonumber(string.format("%.0f", swap_entry[1] / 1024)) .. "M", swap_entry[2]))
+        local entry = map[i]
+        if entry then
+                print(string.format("%-9s %-35s %-9s", tonumber(string.format("%.0f", entry[1] / 1024)) .. "M", entry[3], tonumber(string.format("%.0f", entry[2] / 1024)) .. "M"))
         end
     end
 end
