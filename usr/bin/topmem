@@ -34,6 +34,15 @@ local function get_process_first_arg(path)
   return args[1]
 end
 
+local function convert_hashmap_table(map)
+  local new_hashmap = {}
+  for key, value in pairs(map) do
+      new_hashmap[#new_hashmap+1] = { value[1], value[2], key }
+  end
+
+  return new_hashmap
+end
+
 local function get_process_map()
     local map = {}
     for pid in lfs.dir("/proc/") do
@@ -46,11 +55,17 @@ local function get_process_map()
                 local rss, swap = get_process_values(table.concat({f, "status"}, "/"))
                 local name = get_process_first_arg(table.concat({f, "cmdline"}, "/"))
                 if name and rss then
-                    map[#map+1] = { tonumber(rss), tonumber(swap), name }
+                    if map[name] then
+                        map[name][1] = map[name][1] + tonumber(rss)
+                        map[name][2] = map[name][2] + tonumber(swap)
+                    else
+                        map[name] = { tonumber(rss), tonumber(swap) }
+                    end
                 end
             end
         end
     end
+    map = convert_hashmap_table(map)
     table.sort(map, function (a, b) return (a[1] > b[1]) end)
     return map
 end
