@@ -3,16 +3,13 @@ local lfs = require 'lfs'
 
 -- Patterns
 local pid_pattern = "[0-9]+"
-local proc_name_pattern = "Name:%s*(.+)"
 local vm_rss_pattern = "VmRSS:%s*([0-9]+)"
 local vm_swap_pattern = "VmSwap:%s*([0-9]+)"
 
 local function get_process_values(path)
-    local name, rss, swap
+    local rss, swap
     for line in io.lines(path) do
-        if name == nil then
-            name = line:match(proc_name_pattern)
-        elseif rss == nil then
+        if rss == nil then
             rss = line:match(vm_rss_pattern)
         elseif swap == nil then
             swap = line:match(vm_swap_pattern)
@@ -20,7 +17,21 @@ local function get_process_values(path)
             break
         end
     end
-    return name, rss, swap
+    return rss, swap
+end
+
+local function get_process_first_arg(path)
+  local cmdline_file = io.open(path, "r")
+  if not cmdline_file then
+    return nil
+  end
+  local cmdline = cmdline_file:read("*all")
+  cmdline_file:close()
+  local args = {}
+  for arg in cmdline:gmatch("([^%z]+)") do
+    table.insert(args, arg)
+  end
+  return args[1]
 end
 
 local function get_process_map()
@@ -32,7 +43,8 @@ local function get_process_map()
             assert (type(attr) == "table")
 
             if attr.mode == "directory" then
-                local name, rss, swap = get_process_values(table.concat({f, "status"}, "/"))
+                local rss, swap = get_process_values(table.concat({f, "status"}, "/"))
+                local name = get_process_first_arg(table.concat({f, "cmdline"}, "/"))
                 if name and rss then
                     map[#map+1] = { tonumber(rss), tonumber(swap), name }
                 end
@@ -51,7 +63,7 @@ local function printTop(size)
     for i = 1, size do
         local entry = map[i]
         if entry then
-                print(string.format("%-9s %-35s %-9s", tonumber(string.format("%.0f", entry[1] / 1024)) .. "M", entry[3], tonumber(string.format("%.0f", entry[2] / 1024)) .. "M"))
+            print(string.format("%-9s %-35s %-9s", tonumber(string.format("%.0f", entry[1] / 1024)) .. "M", entry[3], tonumber(string.format("%.0f", entry[2] / 1024)) .. "M"))
         end
     end
 end
