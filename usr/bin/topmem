@@ -70,6 +70,22 @@ local function get_process_map()
     return map
 end
 
+local function truncateString(str)
+  if #str > 25 then
+    return string.sub(str, 1, 25) .. "..."
+  else
+    return str
+  end
+end
+
+local function getFilenameFromPath(path)
+  local lastSlash = string.find(path, "/[^/]*$")
+  if lastSlash then
+    return string.sub(path, lastSlash + 1)
+  else
+    return path
+  end
+end
 
 local function printTop(size)
     size = size or 10
@@ -78,7 +94,7 @@ local function printTop(size)
     for i = 1, size do
         local entry = map[i]
         if entry then
-            print(string.format("%-9s %-35s %-9s", tonumber(string.format("%.0f", entry[1] / 1024)) .. "M", entry[3], tonumber(string.format("%.0f", entry[2] / 1024)) .. "M"))
+            print(string.format("%-9s %-35s %-9s", tonumber(string.format("%.0f", entry[1] / 1024)) .. "M", truncateString(getFilenameFromPath(entry[3])), tonumber(string.format("%.0f", entry[2] / 1024)) .. "M"))
         end
     end
 end
