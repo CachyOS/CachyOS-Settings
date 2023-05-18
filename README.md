@@ -1,2 +1,2 @@
 # CachyOS-Settings
-This repository contains configuration files which tweaks sysctl values, adds udev rules to automatically set io schedulers and more.
+This repository contains configuration files that tweak sysctl values, add udev rules to automatically set schedulers, and provide additional optimizations.
