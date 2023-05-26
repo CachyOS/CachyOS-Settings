@@ -1,5 +1,10 @@
 #!/usr/bin/env lua
-local lfs = require 'lfs'
+local found, lfs = pcall(require, 'lfs')
+
+if not found then
+    print("lua-filesystem dependency is missing, please install it from repositories")
+    os.exit(1)
+end
 
 -- Patterns
 local pid_pattern = "[0-9]+"
