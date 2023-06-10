@@ -5,7 +5,7 @@ This repository contains configuration files that tweak sysctl values, add udev 
 - ZRAM
 - audio latency
 - SATA, power management for HDD to prioritize max performance 
-- IO schedulers, automatic selection scdheulers depends on your HW - SATA SSD, NVME and HDD.
+- IO schedulers, automatic selection schedulers depends on your HW - SATA SSD, NVME and HDD.
 - NVIDIA, load, unload modules and set-up power management. 
 
 ## sysctl
