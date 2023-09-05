@@ -1,2 +1,22 @@
-ACTION=="add", KERNEL=="zram[0-9]*", ATTR{recomp_algorithm}=="", ATTR{recomp_algorithm}="algo=lz4 priority=1"
-IMPORT{program}="/sbin/sh -c \"echo \"type=idle\" > /sys/block/zram*/recompress\""
+# Prefer to recompress only idle pages. This will result in additional memory
+# savings, but may slightly increase CPU load due to additional compression
+# overhead.
+ACTION=="add", KERNEL=="zram[0-9]*", ATTR{recomp_algorithm}="algo=lz4 priority=1", \
+  RUN+="/sbin/sh -c echo 'type=idle' > /sys/block/%k/recompress"
+
+TEST!="/dev/zram0", GOTO="zram_end"
+
+# Since ZRAM stores all pages in compressed form in RAM, we should prefer
+# preempting anonymous pages more than a page (file) cache.  Preempting file
+# pages may not be desirable because a process may want to access a file at any
+# time, whereas if it is preempted, it will cause an additional read cycle from
+# the disk.
+SYSCTL{vm.swappiness}="150"
+
+# Optimal value for games, so sets not too aggressive, but also not too weak
+# kswapd behavior, as described there:
+# https://www.reddit.com/r/linux_gaming/comments/vla9gd/comment/ie1cnrh/
+SYSCTL{vm.watermark_scale_factor}="125"
+SYSCTL{vm.watermark_boost_factor}="0"
+
+LABEL="zram_end"
