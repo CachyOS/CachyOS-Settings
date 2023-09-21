@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
     export WAYLAND=1
-    export QT_QPA_PLATFORM='xcb'
+    export QT_QPA_PLATFORM='wayland;xcb'
     export GDK_BACKEND='wayland,x11'
     export MOZ_DBUS_REMOTE=1
     export MOZ_ENABLE_WAYLAND=1
