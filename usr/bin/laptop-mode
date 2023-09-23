@@ -1,0 +1,28 @@
+#!/bin/bash
+# A script for basic power saving for laptops.
+# Should be called by udev rule.
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This command must be run with root privileges" 1>&2
+    exit 1
+fi
+
+# Quiet redirections
+exec 1> /dev/null
+
+STATE="$(cat /sys/class/power_supply/BAT0/status)"
+
+# Try to do certain things only for laptops with AMD Pstate driver support
+if [ -f /sys/devices/system/cpu/amd_pstate/status ]; then
+
+    ## Set amd-pstate to passive, to enable amd-pstate-epp
+    echo passive | tee /sys/devices/system/cpu/amd_pstate/status
+fi
+
+# Use conversation when laptop is not running on battery power,
+# and powersave when on battery power
+if [ "$STATE" = "Discharging" ]; then
+    echo powersave | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+else
+    echo conservative | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+fi

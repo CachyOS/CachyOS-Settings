@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="power_supply", KERNEL!="hidpp_battery*", RUN+="/usr/bin/laptop-mode"
