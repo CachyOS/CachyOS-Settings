@@ -9,6 +9,9 @@ echo -e "\n"
 echo -e "Check CPU config:\n"
 zgrep -iE 'CONFIG_(GENERIC_CPU( |[2-4])|MZEN|MBULLDOZER|MPILEDRIVER|MSTREAMROLLER|MEXCAVATOR|MBOBCAT|MJAGUAR|MK10|MK8SSE3|MATOM|MGOLDMONTPLUS|MSKYLAKE2|MIVYBRIDGE|MICELAKE)' /proc/config.gz
 echo -e "\n"
-echo -e "Check available schedulers:\n"
-cat /sys/block/sda/queue/scheduler
+echo -e "Current disk schedulers:\n"
+for disk in /sys/block/*/; do
+    echo "`basename "$disk"`: `cat $disk/queue/scheduler`"
+done
+echo -e "\nCheck available schedulers:\n"
 journalctl -k | grep -i scheduler
