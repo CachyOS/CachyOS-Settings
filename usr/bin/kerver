@@ -14,4 +14,4 @@ for disk in /sys/block/*/; do
     echo "`basename "$disk"`: `cat $disk/queue/scheduler`"
 done
 echo -e "\nCheck available schedulers:\n"
-journalctl -k | grep -i scheduler
+journalctl --output cat -k | grep -i scheduler
