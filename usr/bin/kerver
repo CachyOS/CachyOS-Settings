@@ -7,7 +7,7 @@ echo -e "Check x86_64 support:\n"
 /lib64/ld-linux-x86-64.so.2 --help | grep "(supported, searched)"
 echo -e "\n"
 echo -e "Check CPU config:\n"
-zgrep -i CONFIG_GENERIC_CPU /proc/config.gz | grep -wE '\w{18,19}'
+zgrep -iE 'CONFIG_(GENERIC_CPU( |[2-4])|MZEN|MBULLDOZER|MPILEDRIVER|MSTREAMROLLER|MEXCAVATOR|MBOBCAT|MJAGUAR|MK10|MK8SSE3|MATOM|MGOLDMONTPLUS|MSKYLAKE2|MIVYBRIDGE|MICELAKE)' /proc/config.gz
 echo -e "\n"
 echo -e "Check available schedulers:\n"
 cat /sys/block/sda/queue/scheduler
