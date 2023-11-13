@@ -73,8 +73,8 @@ bugreport() {
     echo "dmesg"
     dmesg >> $LOG_FILENAME
 
-    echo "journalctl current boot"
-    journalctl -b 0 >> $LOG_FILENAME
+    echo "journalctl of current boot"
+    journalctl -b -p 4..1 >> $LOG_FILENAME
 }
 
 upload() {
