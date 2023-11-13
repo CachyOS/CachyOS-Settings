@@ -3,7 +3,7 @@
 # CachyOS bug reporting shell script.  This shell
 # script will generate a log file named "cachyos-bug-report.log".
 
-LOG_FILENAME=cachyos-bug-report.log
+LOG_FILENAME=cachyos-bugreport.log
 OLD_LOG_FILENAME=cachyos-bugreport.log.old
 
 ask_yes_no(){
