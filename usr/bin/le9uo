@@ -1,0 +1,11 @@
+#!/bin/bash
+
+## Disable MG-LRU, requirement for le9uo memory protection
+echo "Disable LRU"
+echo n | sudo tee /sys/kernel/mm/lru_gen/enabled
+## Set lv4 values for low memory protection
+## There can be found a different preset in /etc/sysctl.d/99-le9uo-example.conf
+echo "Set lv4 for low memory protection"
+sudo sysctl -w vm.anon_min_ratio=12
+sudo sysctl -w vm.clean_low_ratio=12
+sudo sysctl -w vm.clean_min_ratio=10

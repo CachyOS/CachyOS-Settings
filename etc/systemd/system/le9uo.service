@@ -1,0 +1,9 @@
+[Unit]
+Description=Enable le9uo lv4 preset as service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /usr/bin/le9uo
+
+[Install]
+WantedBy=multi-user.target
