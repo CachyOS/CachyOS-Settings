@@ -1,8 +1,8 @@
-# Prefer to recompress only idle pages. This will result in additional memory
+# Prefer to recompress only huge pages. This will result in additional memory
 # savings, but may slightly increase CPU load due to additional compression
 # overhead.
 ACTION=="add", KERNEL=="zram[0-9]*", ATTR{recomp_algorithm}="algo=lz4 priority=1", \
-  RUN+="/sbin/sh -c echo 'type=idle' > /sys/block/%k/recompress"
+  RUN+="/sbin/sh -c echo 'type=huge' > /sys/block/%k/recompress"
 
 TEST!="/dev/zram0", GOTO="zram_end"
 
