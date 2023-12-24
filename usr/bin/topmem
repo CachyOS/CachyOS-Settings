@@ -1,4 +1,6 @@
 #!/usr/bin/env lua
+local f, concat, sort = string.format, table.concat, table.sort
+
 local found, uv = pcall(require, 'luv')
 
 if not found then
@@ -26,26 +28,25 @@ local function get_process_values(path)
 end
 
 local function get_process_first_arg(path)
-  local cmdline_file = io.open(path, "r")
-  if not cmdline_file then
-    return nil
-  end
-  local cmdline = cmdline_file:read("*all")
-  cmdline_file:close()
-  local args = {}
-  for arg in cmdline:gmatch("([^%z]+)") do
-    table.insert(args, arg)
-  end
-  return args[1]
+    local cmdline_file = io.open(path, "r")
+
+    if not cmdline_file then
+        return nil
+    end
+
+    local cmdline = cmdline_file:read("*all")
+    cmdline_file:close()
+
+    return cmdline:match("([^%z]+)")
 end
 
 local function convert_hashmap_table(map)
-  local new_hashmap = {}
-  for key, value in pairs(map) do
-      new_hashmap[#new_hashmap+1] = { value[1], value[2], key }
-  end
+    local new_hashmap = {}
+    for key, value in pairs(map) do
+        new_hashmap[#new_hashmap + 1] = { value[1], value[2], key }
+    end
 
-  return new_hashmap
+    return new_hashmap
 end
 
 local function get_process_map()
@@ -55,10 +56,10 @@ local function get_process_map()
 
     while pid do
         if pid:match(pid_pattern) then
-            local f = table.concat({"/proc", pid}, "/")
+            local path = concat({ "/proc", pid }, "/")
             if ftype == "directory" then
-                local rss, swap = get_process_values(table.concat({f, "status"}, "/"))
-                local name = get_process_first_arg(table.concat({f, "cmdline"}, "/"))
+                local rss, swap = get_process_values(concat({ path, "status" }, "/"))
+                local name = get_process_first_arg(concat({ path, "cmdline" }, "/"))
                 if name and rss then
                     if map[name] then
                         map[name][1] = map[name][1] + tonumber(rss)
@@ -72,35 +73,36 @@ local function get_process_map()
         pid, ftype = uv.fs_scandir_next(proceses)
     end
     map = convert_hashmap_table(map)
-    table.sort(map, function (a, b) return (a[1] > b[1]) end)
+    sort(map, function(a, b) return (a[1] > b[1]) end)
     return map
 end
 
 local function truncateString(str)
-  if #str > 25 then
-    return string.sub(str, 1, 25) .. "..."
-  else
-    return str
-  end
+    if #str > 25 then
+        return str:sub(1, 25) .. "..."
+    else
+        return str
+    end
 end
 
 local function getFilenameFromPath(path)
-  local lastSlash = string.find(path, "/[^/]*$")
-  if lastSlash then
-    return string.sub(path, lastSlash + 1)
-  else
-    return path
-  end
+    local lastSlash = path:find("/[^/]*$")
+    if lastSlash then
+        return path:sub(lastSlash + 1)
+    else
+        return path
+    end
 end
 
 local function printTop(size)
     size = size or 10
     local map = get_process_map()
-    print(string.format("%-9s %35s %-9s %20s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", ""))
+    print(f("%-9s %35s %-9s %20s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", ""))
     for i = 1, size do
         local entry = map[i]
         if entry then
-            print(string.format("%-9s %-35s %-9s", tonumber(string.format("%.0f", entry[1] / 1024)) .. "M", truncateString(getFilenameFromPath(entry[3])), tonumber(string.format("%.0f", entry[2] / 1024)) .. "M"))
+            print(f("%-9s %-35s %-9s", tonumber(f("%.0f", entry[1] / 1024)) .. "M",
+                truncateString(getFilenameFromPath(entry[3])), tonumber(f("%.0f", entry[2] / 1024)) .. "M"))
         end
     end
 end
