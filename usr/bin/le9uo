@@ -30,7 +30,7 @@ case "$1" in
     new_state="n"
     ;;
   --disable | -d)
-	echo "Enabling Multi-Generational LRU..."
+    echo "Enabling Multi-Generational LRU..."
     new_state="y"
     ;;
   *)
