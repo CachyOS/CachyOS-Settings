@@ -24,4 +24,4 @@ This repository contains configuration files that tweak sysctl values, add udev 
 - Easily switch between amdpstate-epp and amdpstate-guided
 - Upload logs with paste-cachyos, for example: sudo dmesg | paste-cachyos
 - View up to 10 process memory/swap usage (topmem)
-- Tune CFS on the fly with tunecfs (classic,default,BORE values) (only compatible with linux-lts due to being dropped)
+- Tune CFS on the fly with tunecfs (classic, default, BORE values) (only compatible with linux-lts due to being dropped)
