@@ -6,9 +6,12 @@
 # devices, which can help prevent devices with high default latency timers from
 # causing gaps in sound.
 
+sudo -s -- <<EOF
+
 # Reset the latency timer for all PCI devices
-sudo setpci -v -s '*:*' latency_timer=20
-sudo setpci -v -s '0:0' latency_timer=0
+setpci -v -s '*:*' latency_timer=20
+setpci -v -s '0:0' latency_timer=0
 
 # Set latency timer for all sound cards
-sudo setpci -v -d "*:*:04xx" latency_timer=80
+setpci -v -d "*:*:04xx" latency_timer=80
+EOF
