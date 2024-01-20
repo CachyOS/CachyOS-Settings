@@ -4,7 +4,7 @@ local f, concat, sort = string.format, table.concat, table.sort
 local found, uv = pcall(require, 'luv')
 
 if not found then
-    print("libluv dependency is missing, please install it from repositories")
+    print("lua-luv dependency is missing, please install it from repositories")
     os.exit(1)
 end
 
