@@ -4,8 +4,8 @@ Description=Enable le9uo lv4 preset as service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/bash /usr/bin/le9uo -e
-ExecStop=/bin/bash /usr/bin/le9uo -d
+ExecStart=/usr/bin/le9uo -e
+ExecStop=/usr/bin/le9uo -d
 
 [Install]
 WantedBy=multi-user.target
