@@ -36,5 +36,5 @@ If you have any questions, you can contact us by email.
 
 You can also join the discussion on the following platforms:
 
-**Discord:** <https://discord.gg/qJqj94uFwE> <br />
+**Discord:** <https://discord.gg/cachyos-862292009423470592> <br />
 **Telegram:** <https://t.me/+zCzPX4cAFjk1MTYy> <br />
