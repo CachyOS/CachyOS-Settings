@@ -14,7 +14,7 @@ This repository contains configuration files that tweak sysctl values, add udev 
 
 ## modprobe
 - NVIDIA and enable direct rendering
-- Force using of the amdgpu driver for Southern Islands (GCN 1.0+) and Sea
+- Force using of the amdgpu driver for Southern Islands (GCN 1.0+) and Sea Islands (GCN 2.0+)
 
 ## systemd
 - PCI latency
