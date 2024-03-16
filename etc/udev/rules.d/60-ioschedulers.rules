@@ -1,8 +1,23 @@
 # HDD
-ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="1", ATTR{queue/scheduler}="bfq"
+ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="1", ATTR{queue/write_cache}=="write back", ATTR{queue/scheduler}=\
+"bfq"
 
-# SSD
-ACTION=="add|change", KERNEL=="sd[a-z]*|mmcblk[0-9]*", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="mq-deadline"
+# SSD with DRAM cache
+ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}=="0", ATTR{queue/write_cache}=="write back", ATTR{queue/scheduler}=\
+"kyber"
+
+# DRAM-less flash storage
+ACTION=="add|change", KERNEL=="sd[a-z]*|mmcblk[0-9]*", ATTR{queue/write_cache}=="write through", ATTR{queue/scheduler}=\
+"bfq"
 
 # NVMe SSD
-ACTION=="add|change", KERNEL=="nvme[0-9]*", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="none"
+ACTION=="add|change", KERNEL=="nvme[0-9]*", ATTR{queue/scheduler}=\
+"none"
+
+# Optical
+ACTION=="add|change", KERNEL=="sr[0-9]*", ATTR{queue/scheduler}=\
+"bfq"
+
+# Virtual
+ACTION=="add|change", KERNEL=="vd[a-z]*", ATTR{queue/scheduler}=\
+"mq-deadline"
