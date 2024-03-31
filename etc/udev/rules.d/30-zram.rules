@@ -1,0 +1,16 @@
+# Prefer to recompress only huge pages. This will result in additional memory
+# savings, but may slightly increase CPU load due to additional compression
+# overhead.
+ACTION=="add", KERNEL=="zram[0-9]*", ATTR{recomp_algorithm}="algo=lz4 priority=1", \
+  RUN+="/sbin/sh -c echo 'type=huge' > /sys/block/%k/recompress"
+
+TEST!="/dev/zram0", GOTO="zram_end"
+
+# Since ZRAM stores all pages in compressed form in RAM, we should prefer
+# preempting anonymous pages more than a page (file) cache.  Preempting file
+# pages may not be desirable because a process may want to access a file at any
+# time, whereas if it is preempted, it will cause an additional read cycle from
+# the disk.
+SYSCTL{vm.swappiness}="150"
+
+LABEL="zram_end"
