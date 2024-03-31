@@ -13,10 +13,4 @@ TEST!="/dev/zram0", GOTO="zram_end"
 # the disk.
 SYSCTL{vm.swappiness}="150"
 
-# Optimal value for games, so sets not too aggressive, but also not too weak
-# kswapd behavior, as described there:
-# https://www.reddit.com/r/linux_gaming/comments/vla9gd/comment/ie1cnrh/
-SYSCTL{vm.watermark_scale_factor}="125"
-SYSCTL{vm.watermark_boost_factor}="0"
-
 LABEL="zram_end"
