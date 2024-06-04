@@ -13,9 +13,9 @@ local pid_pattern = "[0-9]+"
 local vm_rss_pattern = "VmRSS:%s*([0-9]+)"
 local vm_swap_pattern = "VmSwap:%s*([0-9]+)"
 
-local function get_process_values(path)
+local function get_process_values(pid)
     local rss, swap
-    for line in io.lines(path) do
+    for line in io.lines(concat({"/proc", pid, "status"}, "/")) do
         if rss == nil then
             rss = line:match(vm_rss_pattern)
         elseif swap == nil then
@@ -24,18 +24,18 @@ local function get_process_values(path)
             break
         end
     end
-    return rss, swap
+    return tonumber(rss), tonumber(swap)
 end
 
-local function get_process_first_arg(path)
-    local cmdline_file = io.open(path, "r")
+local function get_process_first_arg(pid)
+    local file = io.open(concat({"/proc", pid, "cmdline"}, "/"))
 
-    if not cmdline_file then
+    if not file then
         return nil
     end
 
-    local cmdline = cmdline_file:read("*all")
-    cmdline_file:close()
+    local cmdline = file:read("*all")
+    file:close()
 
     return cmdline:match("([^%z]+)")
 end
@@ -56,16 +56,15 @@ local function get_process_map()
 
     while pid do
         if pid:match(pid_pattern) then
-            local path = concat({ "/proc", pid }, "/")
             if ftype == "directory" then
-                local rss, swap = get_process_values(concat({ path, "status" }, "/"))
-                local name = get_process_first_arg(concat({ path, "cmdline" }, "/"))
-                if name and rss then
+                local rss, swap = get_process_values(pid)
+                local name = get_process_first_arg(pid)
+                if name then
                     if map[name] then
-                        map[name][1] = map[name][1] + tonumber(rss)
-                        map[name][2] = map[name][2] + tonumber(swap)
+                        map[name][1] = map[name][1] + rss
+                        map[name][2] = map[name][2] + swap
                     else
-                        map[name] = { tonumber(rss), tonumber(swap) }
+                        map[name] = { rss, swap }
                     end
                 end
             end
