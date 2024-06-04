@@ -8,14 +8,19 @@ if not found then
     os.exit(1)
 end
 
+local function printf(pattern, ...)
+    print(pattern:format(...))
+end
+
 -- Patterns
 local pid_pattern = "[0-9]+"
+local ksm_profit_pattern = "ksm_process_profit%s*([0-9]+)"
 local vm_rss_pattern = "VmRSS:%s*([0-9]+)"
 local vm_swap_pattern = "VmSwap:%s*([0-9]+)"
 
 local function get_process_values(pid)
     local rss, swap
-    for line in io.lines(concat({"/proc", pid, "status"}, "/")) do
+    for line in io.lines(concat({ "/proc", pid, "status" }, "/")) do
         if rss == nil then
             rss = line:match(vm_rss_pattern)
         elseif swap == nil then
@@ -27,8 +32,27 @@ local function get_process_values(pid)
     return tonumber(rss), tonumber(swap)
 end
 
+local function get_process_ksm_profit(pid)
+    local file = io.open(concat({ "/proc", pid, "ksm_stat" }, "/"))
+
+    if not file then
+        return 0
+    end
+
+    local stat = file:read("*a")
+    local profit = stat:match(ksm_profit_pattern)
+
+    file:close()
+
+    if not profit then
+        return 0
+    end
+
+    return tonumber(profit)
+end
+
 local function get_process_first_arg(pid)
-    local file = io.open(concat({"/proc", pid, "cmdline"}, "/"))
+    local file = io.open(concat({ "/proc", pid, "cmdline" }, "/"))
 
     if not file then
         return nil
@@ -43,7 +67,7 @@ end
 local function convert_hashmap_table(map)
     local new_hashmap = {}
     for key, value in pairs(map) do
-        new_hashmap[#new_hashmap + 1] = { value[1], value[2], key }
+        new_hashmap[#new_hashmap + 1] = { value[1], value[2], value[3], key }
     end
 
     return new_hashmap
@@ -59,12 +83,14 @@ local function get_process_map()
             if ftype == "directory" then
                 local rss, swap = get_process_values(pid)
                 local name = get_process_first_arg(pid)
+                local ksm_profit = get_process_ksm_profit(pid)
                 if name then
                     if map[name] then
                         map[name][1] = map[name][1] + rss
                         map[name][2] = map[name][2] + swap
+                        map[name][3] = map[name][3] + ksm_profit
                     else
-                        map[name] = { rss, swap }
+                        map[name] = { rss, swap, ksm_profit }
                     end
                 end
             end
@@ -72,7 +98,7 @@ local function get_process_map()
         pid, ftype = uv.fs_scandir_next(processes)
     end
     map = convert_hashmap_table(map)
-    sort(map, function(a, b) return (a[1] > b[1]) end)
+    sort(map, function(a, b) return (a[3] > b[3]) end)
     return map
 end
 
@@ -96,12 +122,17 @@ end
 local function printTop(size)
     size = size or 10
     local map = get_process_map()
-    print(f("%-9s %35s %-9s %20s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", ""))
+    printf("%-9s %35s %-9s %-9s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", "KSM")
     for i = 1, size do
         local entry = map[i]
         if entry then
-            print(f("%-9s %-35s %-9s", tonumber(f("%.0f", entry[1] / 1024)) .. "M",
-                truncateString(getFilenameFromPath(entry[3])), tonumber(f("%.0f", entry[2] / 1024)) .. "M"))
+            printf(
+                "%-9s %-35s %-9s %-9s",
+                tonumber(f("%.0f", entry[1] / 1024)) .. "M",
+                truncateString(getFilenameFromPath(entry[4])),
+                tonumber(f("%.0f", entry[2] / 1024)) .. "M",
+                tonumber(f("%.0f", entry[3] / 1024 / 1024)) .. "M"
+            )
         end
     end
 end
