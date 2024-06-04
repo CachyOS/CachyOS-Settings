@@ -1,6 +1,5 @@
 #!/usr/bin/env lua
 local f, concat, sort = string.format, table.concat, table.sort
-
 local found, uv = pcall(require, 'luv')
 
 if not found then
@@ -73,7 +72,7 @@ local function convert_hashmap_table(map)
     return new_hashmap
 end
 
-local function get_process_map()
+local function get_process_map(sort_by)
     local map = {}
     local processes = uv.fs_scandir("/proc")
     local pid, ftype = uv.fs_scandir_next(processes)
@@ -98,7 +97,7 @@ local function get_process_map()
         pid, ftype = uv.fs_scandir_next(processes)
     end
     map = convert_hashmap_table(map)
-    sort(map, function(a, b) return (a[3] > b[3]) end)
+    sort(map, function(a, b) return (a[sort_by] > b[sort_by]) end)
     return map
 end
 
@@ -119,9 +118,8 @@ local function getFilenameFromPath(path)
     end
 end
 
-local function printTop(size)
-    size = size or 10
-    local map = get_process_map()
+local function printTop(size, sort_by)
+    local map = get_process_map(sort_by)
     printf("%-9s %35s %-9s %-9s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", "KSM")
     for i = 1, size do
         local entry = map[i]
@@ -137,4 +135,43 @@ local function printTop(size)
     end
 end
 
-printTop(arg[1])
+local function main()
+    local sort_types = {
+        ["rss"] = 1,
+        ["swap"] = 2,
+        ["ksm"] = 3
+    }
+    local sort_by = sort_types["rss"]
+    local size
+    local i = 1
+    while i < #arg + 1 do
+        if arg[i] == "--sort" or arg[i] == "-s" then
+            local criteria = arg[i + 1]
+            if not criteria then
+                print("Column to sort by is not specified")
+                os.exit(1)
+            end
+
+            if not sort_types[criteria] then
+                print("Wrong sorting criterion. Only available: rss, swap, ksm.")
+                os.exit(1)
+            else
+                sort_by = sort_types[criteria]
+                i = i + 1
+            end
+        else
+            local status, value = pcall(tonumber, arg[i])
+            if not status then
+                print("The argument must be a number")
+                os.exit(1)
+            else
+                size = value
+            end
+        end
+        i = i + 1
+    end
+
+    printTop(size or 10, sort_by)
+end
+
+main()
