@@ -18,8 +18,16 @@ local vm_rss_pattern = "VmRSS:%s*([0-9]+)"
 local vm_swap_pattern = "VmSwap:%s*([0-9]+)"
 
 local function get_process_values(pid)
+    local path = concat({ "/proc", pid, "status" }, "/")
+    local file = io.open(path)
+
+    if not file then
+        return nil
+    end
+
     local rss, swap
-    for line in io.lines(concat({ "/proc", pid, "status" }, "/")) do
+    local line = file:read()
+    while line do
         if rss == nil then
             rss = line:match(vm_rss_pattern)
         elseif swap == nil then
@@ -27,7 +35,9 @@ local function get_process_values(pid)
         else
             break
         end
+        line = file:read()
     end
+    file:close()
     return tonumber(rss), tonumber(swap)
 end
 
@@ -83,7 +93,7 @@ local function get_process_map(sort_by)
                 local rss, swap = get_process_values(pid)
                 local name = get_process_first_arg(pid)
                 local ksm_profit = get_process_ksm_profit(pid)
-                if name then
+                if name and rss then
                     if map[name] then
                         map[name][1] = map[name][1] + rss
                         map[name][2] = map[name][2] + swap
