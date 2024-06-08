@@ -47,13 +47,13 @@ depends = {
     "btrfs": "btrfs-progs"
 }
 
-for key, package in depends.items():
-    binary = shutil.which(key)
+for cmd, package in depends.items():
+    binary = shutil.which(cmd)
     if not binary:
-        print(f"{key} not found, please install it to continue. (e.g. pacman -S {package})")
+        print(f"{cmd} not found, please install it to continue. (e.g. pacman -S {package})")
         sys.exit(1)
     else:
-        depends[key] = binary
+        depends[cmd] = binary
 
 
 data, err = subprocess.Popen(
