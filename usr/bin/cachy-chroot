@@ -39,40 +39,25 @@ if not args.skip_root_check and os.geteuid() != 0:
     )
     sys.exit(1)
 
-lsblk = shutil.which("lsblk")
-mount = shutil.which("mount")
-umount = shutil.which("umount")
-btrfs = shutil.which("btrfs")
-arch_chroot = shutil.which("arch-chroot")
+depends = {
+    "lsblk": "util-linux",
+    "mount": "util-linux",
+    "umount": "util-linux",
+    "arch-chroot": "arch-install-scripts",
+    "btrfs": "btrfs-progs"
+}
 
-if not lsblk:
-    print("lsblk not found, please install it to continue. (e.g. pacman -S util-linux)")
-    sys.exit(1)
+for key, package in depends.items():
+    binary = shutil.which(key)
+    if not binary:
+        print(f"{key} not found, please install it to continue. (e.g. pacman -S {package})")
+        sys.exit(1)
+    else:
+        depends[key] = binary
 
-if not mount:
-    print("mount not found, please install it to continue. (e.g. pacman -S util-linux)")
-    sys.exit(1)
-
-if not umount:
-    print(
-        "umount not found, please install it to continue. (e.g. pacman -S util-linux)"
-    )
-    sys.exit(1)
-
-if not btrfs:
-    print(
-        "btrfs not found, please install it to continue. (e.g. pacman -S btrfs-progs)"
-    )
-    sys.exit(1)
-
-if not arch_chroot:
-    print(
-        "arch-chroot not found, please install it to continue. (e.g. pacman -S arch-install-scripts)"
-    )
-    sys.exit(1)
 
 data, err = subprocess.Popen(
-    [lsblk, "-f", "-o", "NAME,FSTYPE,TYPE,UUID", "-p", "-a", "-J"],
+    [depends['lsblk'], "-f", "-o", "NAME,FSTYPE,TYPE,UUID", "-p", "-a", "-J"],
     stdout=subprocess.PIPE,
 ).communicate()
 
@@ -160,13 +145,13 @@ def mount_block_device(
         options = []
     print(f"Mounting {block_device} to {mount_point} with options {options}")
     os.makedirs(mount_point, exist_ok=True)
-    process = subprocess.run([mount, block_device.name, mount_point, *options])
+    process = subprocess.run([depends['mount'], block_device.name, mount_point, *options])
     process.check_returncode()
 
 
 def unmount_block_device(mount_point: str):
     print(f"Unmounting {mount_point}")
-    process = subprocess.run([umount, mount_point])
+    process = subprocess.run([depends['umount'], mount_point])
     process.check_returncode()
 
 
@@ -179,7 +164,7 @@ def scan_btrfs_subvolumes(btrfs_partition: BlockDevice):
         mount_block_device(btrfs_partition, temp_directory)
         subvolumes = (
             subprocess.run(
-                [btrfs, "subvolume", "list", temp_directory],
+                [depends['btrfs'], "subvolume", "list", temp_directory],
                 stdout=subprocess.PIPE,
             )
             .stdout.decode("utf-8")
@@ -356,7 +341,7 @@ print(
     "Remember to exit the chroot environment when you're done with 'exit' or 'Ctrl+D'"
 )
 print("Happy chrooting! :)")
-process = subprocess.run([arch_chroot, temp_mount_dir])
+process = subprocess.run([depends['arch-chroot'], temp_mount_dir])
 try:
     process.check_returncode()
 except subprocess.CalledProcessError:
