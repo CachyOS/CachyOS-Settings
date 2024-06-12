@@ -130,12 +130,12 @@ end
 
 local function printTop(size, sort_by)
     local map = get_process_map(sort_by)
-    printf("%-9s %35s %-9s %-9s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", "KSM")
+    printf("%-9s %35s %-9s %-s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", "KSM")
     for i = 1, size do
         local entry = map[i]
         if entry then
             printf(
-                "%-9s %-35s %-9s %-9s",
+                "%-9s %-35s %-9s %-s",
                 tonumber(f("%.0f", entry[1] / 1024)) .. "M",
                 truncateString(getFilenameFromPath(entry[4])),
                 tonumber(f("%.0f", entry[2] / 1024)) .. "M",
