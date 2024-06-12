@@ -53,5 +53,5 @@ else
 fi
 
 if [ -n "$save" ]; then
-    echo "/sys/kernel/mm/ksm/run - - - - $new_state" > "$conf_path"
+    echo "w! /sys/kernel/mm/ksm/run - - - - $new_state" > "$conf_path"
 fi
