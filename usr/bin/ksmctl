@@ -10,7 +10,7 @@ conf_path="/etc/tmpfiles.d/ksm.conf"
 save="y"
 
 if [ "$#" -eq 0 ]; then
-  echo "Usage: $0 [--unsave|-u] [--enable|-e|--disable|-d]"
+  echo "Usage: $0 [--unsave|-u] {--enable|-e|--disable|-d}"
   echo "  --enable , -e :  Enable KSM"
   echo "  --disable, -d : Disable KSM"
   echo "  --unsave, -u : Do not save choice to config files"
