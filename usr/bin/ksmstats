@@ -1,0 +1,33 @@
+#!/bin/sh
+echo "======================================================"
+echo "ksmstats for CachyOS"
+echo "======================================================"
+	while true; do
+		echo "Full scans: $(cat /sys/kernel/mm/ksm/full_scans)"
+		echo "Interval: $(cat /sys/kernel/mm/ksm/sleep_millisecs)" ms
+		echo ":"
+		echo "Max page sharing ratio: $(cat /sys/kernel/mm/ksm/max_page_sharing)"
+		echo "Pages to scan: $(cat /sys/kernel/mm/ksm/pages_to_scan)"
+		echo "Pages over ratio: $(cat /sys/kernel/mm/ksm/stable_node_chains)"
+		echo "Duplicated pages: $(cat /sys/kernel/mm/ksm/stable_node_dups)"
+		echo "Use zero pages: $(cat /sys/kernel/mm/ksm/use_zero_pages)"
+		if [ "$(cat /sys/kernel/mm/ksm/pages_shared)" -gt 0  ] && [ "$(cat /sys/kernel/mm/ksm/pages_sharing)" -gt 0 ]; then
+			echo "Sharing/shared ratio: $(awk "BEGIN {x=$(cat /sys/kernel/mm/ksm/pages_sharing);y=$(cat /sys/kernel/mm/ksm/pages_shared);print x/y}")"
+			echo "Unshared/sharing ratio: $(awk "BEGIN {x=$(cat /sys/kernel/mm/ksm/pages_unshared);y=$(cat /sys/kernel/mm/ksm/pages_sharing);print x/y}")"
+		else
+			echo "Sharing/shared ratio: 0"
+			echo "Unshared/sharing ratio: 0"
+		fi
+		echo ":"
+		# formula MiB: $page_value * page size in Bytes / (1024 * 1024)
+		# = $page_value * 4096 / (1024 / 1024) = $page_value / 256 (MiB)
+		echo "Pages sharing: $(awk '{ print($0 / 256) }' /sys/kernel/mm/ksm/pages_sharing):MiB"
+		echo "Pages shared: $(awk '{ print($0 / 256) }' /sys/kernel/mm/ksm/pages_shared):MiB"
+		echo "Pages unshared: $(awk '{ print($0 / 256) }' /sys/kernel/mm/ksm/pages_unshared):MiB"
+		echo ":"
+		# https://www.kernel.org/doc/Documentation/admin-guide/mm/ksm.rst
+		# general_profit =~ pages_sharing * sizeof(page) - (all_rmap_items) * sizeof(rmap_item);
+		echo "General profit: $(awk '{ print($0 / 1024 / 1024) }' /sys/kernel/mm/ksm/general_profit):MiB"
+		break
+done | column -t -s':'
+
