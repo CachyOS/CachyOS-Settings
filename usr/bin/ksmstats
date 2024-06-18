@@ -1,7 +1,7 @@
 #!/bin/sh
-echo "======================================================"
+echo "====================="
 echo "ksmstats for CachyOS"
-echo "======================================================"
+echo "====================="
 
 while true; do
    echo "Full scans: $(cat /sys/kernel/mm/ksm/full_scans)"
