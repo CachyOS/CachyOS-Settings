@@ -155,7 +155,7 @@ local function main()
     local size
     local i = 1
     while i < #arg + 1 do
-        if arg[i] == "--sort" or arg[i]:match("--sort=*") or arg[i] == "-s" then
+        if arg[i] == "--sort" or arg[i] == "-s" or arg[i]:match("--sort=*") then
             local criteria
             local shift = true
 
