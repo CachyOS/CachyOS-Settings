@@ -155,8 +155,19 @@ local function main()
     local size
     local i = 1
     while i < #arg + 1 do
-        if arg[i] == "--sort" or arg[i] == "-s" then
-            local criteria = arg[i + 1]
+        if arg[i] == "--sort" or arg[i]:match("--sort=*") or arg[i] == "-s" then
+            local criteria
+            local shift = true
+
+            for value in string.gmatch(arg[i], "([^=]+)") do
+                if value ~= "--sort" then
+                    criteria = value
+                    shift = false
+                    break
+                end
+            end
+
+            criteria = criteria or arg[i + 1]
             if not criteria then
                 print("Column to sort by is not specified")
                 os.exit(1)
@@ -167,7 +178,9 @@ local function main()
                 os.exit(1)
             else
                 sort_by = sort_types[criteria]
-                i = i + 1
+                if shift then
+                    i = i + 1
+                end
             end
         else
             local status, value = pcall(tonumber, arg[i])
