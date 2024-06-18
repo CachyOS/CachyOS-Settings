@@ -2,9 +2,13 @@
 local f, concat, sort = string.format, table.concat, table.sort
 local found, uv = pcall(require, 'luv')
 
-if not found then
-    print("lua-luv dependency is missing, please install it from repositories")
+local function die(err, ...)
+    print(err:format(...))
     os.exit(1)
+end
+
+if not found then
+    die("lua-luv dependency is missing, please install it from repositories")
 end
 
 local function printf(pattern, ...)
@@ -169,13 +173,11 @@ local function main()
 
             criteria = criteria or arg[i + 1]
             if not criteria then
-                print("Column to sort by is not specified")
-                os.exit(1)
+                die("Column to sort by is not specified")
             end
 
             if not sort_types[criteria] then
-                print("Wrong sorting criterion. Only available: rss, swap, ksm.")
-                os.exit(1)
+                die("Wrong sorting criterion. Only available: rss, swap, ksm.")
             else
                 sort_by = sort_types[criteria]
                 if shift then
@@ -185,8 +187,7 @@ local function main()
         else
             local status, value = pcall(tonumber, arg[i])
             if not status then
-                print("The argument must be a number")
-                os.exit(1)
+                die("The argument must be a number")
             else
                 size = value
             end
