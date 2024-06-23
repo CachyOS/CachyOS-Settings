@@ -2,4 +2,4 @@
 # Helper script to enable the performance gov with proton or others
 
 # set performance governors, as long the game is launched
-powerprofilesctl launch -p performance -r "Launched with CachyOS game-performance utility" "$@"
+exec powerprofilesctl launch -p performance -r "Launched with CachyOS game-performance utility" "$@"
