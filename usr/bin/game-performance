@@ -1,0 +1,4 @@
+#!/bin/bash
+# Helper script to enable the performance gov with proton or others
+
+powerprofilesctl set performance
