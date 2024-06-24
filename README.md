@@ -10,7 +10,6 @@ This repository contains configuration files that tweak sysctl values, add udev 
 
 ## sysctl
 - Tweaks focused to memory and network.
-- Low Memory Optimizer (le9uo) patched by firelzrd. The optimal values ​​are configured automatically.
 
 ## modprobe
 - NVIDIA and enable direct rendering
@@ -18,10 +17,8 @@ This repository contains configuration files that tweak sysctl values, add udev 
 
 ## systemd
 - PCI latency
-- Disable LRU_GEN when possible to start le9
 
 ## Scripts
 - Easily switch between amdpstate-epp and amdpstate-guided
 - Upload logs with paste-cachyos, for example: sudo dmesg | paste-cachyos
 - View up to 10 process memory/swap usage (topmem)
-- Tune CFS on the fly with tunecfs (classic, default, BORE values) (only compatible with linux-lts due to being dropped)
