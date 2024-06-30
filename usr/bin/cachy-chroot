@@ -27,8 +27,14 @@ parser = argparse.ArgumentParser(description="Chroot helper for CachyOS")
 
 parser.add_argument(
     "--skip-root-check",
-    help="Skip root check",
-    action="store_true",
+    help="Allow running the script without root permissions",
+    action=argparse.BooleanOptionalAction,
+)
+
+parser.add_argument(
+    "--show-btrfs-dot-snapshots",
+    help="Show .snapshots subvolumes for BTRFS partitions",
+    action=argparse.BooleanOptionalAction,
 )
 
 args = parser.parse_args()
@@ -44,20 +50,22 @@ depends = {
     "mount": "util-linux",
     "umount": "util-linux",
     "arch-chroot": "arch-install-scripts",
-    "btrfs": "btrfs-progs"
+    "btrfs": "btrfs-progs",
 }
 
 for cmd, package in depends.items():
     binary = shutil.which(cmd)
     if not binary:
-        print(f"{cmd} not found, please install it to continue. (e.g. pacman -S {package})")
+        print(
+            f"{cmd} not found, please install it to continue. (e.g. pacman -S {package})"
+        )
         sys.exit(1)
     else:
         depends[cmd] = binary
 
 
 data, err = subprocess.Popen(
-    [depends['lsblk'], "-f", "-o", "NAME,FSTYPE,TYPE,UUID", "-p", "-a", "-J"],
+    [depends["lsblk"], "-f", "-o", "NAME,FSTYPE,TYPE,UUID", "-p", "-a", "-J"],
     stdout=subprocess.PIPE,
 ).communicate()
 
@@ -145,13 +153,15 @@ def mount_block_device(
         options = []
     print(f"Mounting {block_device} to {mount_point} with options {options}")
     os.makedirs(mount_point, exist_ok=True)
-    process = subprocess.run([depends['mount'], block_device.name, mount_point, *options])
+    process = subprocess.run(
+        [depends["mount"], block_device.name, mount_point, *options]
+    )
     process.check_returncode()
 
 
 def unmount_block_device(mount_point: str):
     print(f"Unmounting {mount_point}")
-    process = subprocess.run([depends['umount'], mount_point])
+    process = subprocess.run([depends["umount"], mount_point])
     process.check_returncode()
 
 
@@ -164,7 +174,7 @@ def scan_btrfs_subvolumes(btrfs_partition: BlockDevice):
         mount_block_device(btrfs_partition, temp_directory)
         subvolumes = (
             subprocess.run(
-                [depends['btrfs'], "subvolume", "list", temp_directory],
+                [depends["btrfs"], "subvolume", "list", temp_directory],
                 stdout=subprocess.PIPE,
             )
             .stdout.decode("utf-8")
@@ -174,6 +184,8 @@ def scan_btrfs_subvolumes(btrfs_partition: BlockDevice):
             subvol_id, path = subvolume.split(" path ")
             subvol_id = int(subvol_id.split(" ")[1])
             path = path.strip()
+            if not args.show_btrfs_dot_snapshots and ".snapshots" in path:
+                continue
             btrfs_subvolume = BTRFSSubvolume(
                 btrfs_partition.name,
                 btrfs_partition.fstype,
@@ -341,7 +353,7 @@ print(
     "Remember to exit the chroot environment when you're done with 'exit' or 'Ctrl+D'"
 )
 print("Happy chrooting! :)")
-process = subprocess.run([depends['arch-chroot'], temp_mount_dir])
+process = subprocess.run([depends["arch-chroot"], temp_mount_dir])
 try:
     process.check_returncode()
 except subprocess.CalledProcessError:
