@@ -140,10 +140,10 @@ local function print_top(size, sort_by)
         if entry then
             printf(
                 "%-9s %-35s %-9s %-s",
-                tonumber(f("%.0fM", entry[1] / 1024)),
+                tonumber(f("%.0f", entry[1] / 1024)) .. "M",
                 truncate(get_filename(entry[4])),
-                tonumber(f("%.0fM", entry[2] / 1024)),
-                tonumber(f("%.0fM", entry[3] / 1024 / 1024))
+                tonumber(f("%.0f", entry[2] / 1024)) .. "M",
+                tonumber(f("%.0f", entry[3] / 1024 / 1024)) .. "M"
             )
         end
     end
