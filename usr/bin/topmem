@@ -115,7 +115,7 @@ local function get_process_map(sort_by)
     return map
 end
 
-local function truncateString(str)
+local function truncate(str)
     if #str > 25 then
         return str:sub(1, 25) .. "..."
     else
@@ -123,7 +123,7 @@ local function truncateString(str)
     end
 end
 
-local function getFilenameFromPath(path)
+local function get_filename(path)
     local lastSlash = path:find("/[^/]*$")
     if lastSlash then
         return path:sub(lastSlash + 1)
@@ -132,7 +132,7 @@ local function getFilenameFromPath(path)
     end
 end
 
-local function printTop(size, sort_by)
+local function print_top(size, sort_by)
     local map = get_process_map(sort_by)
     printf("%-9s %35s %-9s %-s", "MEMORY", "Top " .. size .. " processes       ", "SWAP", "KSM")
     for i = 1, size do
@@ -141,7 +141,7 @@ local function printTop(size, sort_by)
             printf(
                 "%-9s %-35s %-9s %-s",
                 tonumber(f("%.0f", entry[1] / 1024)) .. "M",
-                truncateString(getFilenameFromPath(entry[4])),
+                truncate(get_filename(entry[4])),
                 tonumber(f("%.0f", entry[2] / 1024)) .. "M",
                 tonumber(f("%.0f", entry[3] / 1024 / 1024)) .. "M"
             )
@@ -195,7 +195,7 @@ local function main()
         i = i + 1
     end
 
-    printTop(size or 10, sort_by)
+    print_top(size or 10, sort_by)
 end
 
 main()
