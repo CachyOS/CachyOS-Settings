@@ -1,19 +1,29 @@
 #!/bin/bash
 
-echo -e "Check kernel version:\n"
-cat /proc/version && uname -a
-echo -e "\n"
-echo -e "Check x86_64 support:\n"
-/lib64/ld-linux-x86-64.so.2 --help | grep "(supported, searched)"
-echo -e "\n"
-echo -e "Check CPU config:\n"
-zgrep -iE 'CONFIG_(GENERIC_CPU( |[2-4])|MZEN|MBULLDOZER|MPILEDRIVER|MSTREAMROLLER|MEXCAVATOR|MBOBCAT|MJAGUAR|MK10|MK8SSE3|MATOM|MGOLDMONTPLUS|MSKYLAKE2|MIVYBRIDGE|MICELAKE|MNATIVE_INTEL|MNATIVE_AMD)' /proc/config.gz
-echo -e "\n"
-echo -e "Current disk schedulers:\n"
-for disk in /sys/block/*/; do
-    if [[ -f $disk/queue/scheduler ]]; then
-        echo "`basename "$disk"`: `cat $disk/queue/scheduler`"
-    fi
-done
-echo -e "\nCheck available schedulers:\n"
-journalctl --output cat -k | grep -i scheduler
+cat << EOF
+Check kernel version:
+
+$(cat /proc/version && uname -a)
+
+
+Check x86_64 support:
+
+$(/lib64/ld-linux-x86-64.so.2 --help | grep "(supported, searched)")
+
+
+Check CPU config:
+
+$(zgrep -iE 'CONFIG_(GENERIC_CPU( |[2-4])|MZEN|MBULLDOZER|MPILEDRIVER|MSTREAMROLLER|MEXCAVATOR|MBOBCAT|MJAGUAR|MK10|MK8SSE3|MATOM|MGOLDMONTPLUS|MSKYLAKE2|MIVYBRIDGE|MICELAKE|MNATIVE_INTEL|MNATIVE_AMD)' /proc/config.gz)
+
+
+Current disk schedulers:
+
+$(for disk in /sys/block/*/
+do [ -f "$disk/queue/scheduler" ] \
+    && echo "$(basename "$disk"): $(cat "$disk/queue/scheduler")"
+done)
+
+Check available schedulers:
+
+$(journalctl --output cat -k | grep -i scheduler)
+EOF
