@@ -149,6 +149,22 @@ local function print_top(size, sort_by)
     end
 end
 
+local function print_help()
+    print([[
+Shows names of the top 10 (or N) processes by memory consumption
+
+Usage: topmem [OPTIONS] [N]
+
+Arguments:
+  [N] [default: 10]
+
+Options:
+  -s, --sort <TYPE>  Column to sort by [possible values: rss (default), swap, ksm]
+  -h, --help         Show this message]]
+)
+    os.exit(0)
+end
+
 local function main()
     local sort_types = {
         ["rss"] = 1,
@@ -184,6 +200,8 @@ local function main()
                     i = i + 1
                 end
             end
+        elseif arg[i] == "--help" or arg[i] == "-h" then
+            print_help()
         else
             local status, value = pcall(tonumber, arg[i])
             if not status then
