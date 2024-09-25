@@ -2,7 +2,6 @@
 This repository contains configuration files that tweak sysctl values, add udev rules to automatically set schedulers, and provide additional optimizations.
 
 ## udev rules
-- ZRAM tuning
 - Audio latency
 - SATA Active Link Power Management for HDD to prioritize max performance 
 - IO schedulers, automatic selection schedulers depends on your HW - SATA SSD, NVME and HDD.
@@ -17,6 +16,10 @@ This repository contains configuration files that tweak sysctl values, add udev 
 
 ## systemd
 - PCI latency
+- Journal Size reduced to 50MB
+- KSM inheritated via system
+- Timesync config for time.google.com
+- Zram Generator config
 
 ## Scripts
 - Easily switch between amdpstate-epp and amdpstate-guided
