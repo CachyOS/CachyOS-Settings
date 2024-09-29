@@ -1,0 +1,22 @@
+{
+    "rules": [
+        {
+            "pattern": {
+                "feature": "procname",
+                "matches": "kwin_wayland"
+            },
+            "profile": "Limit Free Buffer Pool On Wayland Compositors"
+        }
+    ],
+    "profiles": [
+        {
+            "name": "Limit Free Buffer Pool On Wayland Compositors",
+            "settings": [
+                {
+                    "key": "GLVidHeapReuseRatio",
+                    "value": 1
+                }
+            ]
+        }
+    ]
+}
