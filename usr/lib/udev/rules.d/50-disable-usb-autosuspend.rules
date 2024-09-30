@@ -1,0 +1,10 @@
+# Has the same idea as usbcore.autosuspend=-1 and usbcore.autosuspend_delay_ms=-1 where you check on /sys/module/usbcore/parameters/autosuspend but does not seem to have an affect.
+# Change that path only works by adding the key=val above in the kernel boot line.
+
+# https://www.kernel.org/doc/Documentation/usb/power-management.txt
+# An example would be to check values you find on /dev/input/by-id/
+# udevadm info -a -n /dev/input/by-id/YOUR_DEVICE
+ACTION=="add|change", SUBSYSTEMS=="usb", ATTR{power/autosuspend}="-1"
+ACTION=="add|change", SUBSYSTEMS=="usb", ATTR{power/autosuspend_delay_ms}="-1"
+ACTION=="add|change", SUBSYSTEMS=="input", ATTR{power/autosuspend}="-1"
+ACTION=="add|change", SUBSYSTEMS=="input", ATTR{power/autosuspend_delay_ms}="-1"
