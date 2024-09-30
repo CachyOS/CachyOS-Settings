@@ -1,0 +1,15 @@
+[Unit]
+Description=Suspend gnome-shell
+Before=systemd-suspend.service
+Before=systemd-hibernate.service
+Before=nvidia-suspend.service
+Before=nvidia-hibernate.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 3
+ExecStart=/usr/bin/suspend-gnome-shell.sh suspend
+
+[Install]
+WantedBy=systemd-suspend.service
+WantedBy=systemd-hibernate.service
