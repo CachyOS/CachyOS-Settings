@@ -7,4 +7,4 @@ if ! powerprofilesctl list | grep -q 'performance:'; then
 fi
 
 # set performance governors, as long the game is launched
-exec powerprofilesctl launch -p performance -r "Launched with CachyOS game-performance utility" "$@"
+exec powerprofilesctl launch -p performance -r "Launched with CachyOS game-performance utility" -- "$@"
