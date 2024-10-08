@@ -1,0 +1,2 @@
+# Disable D3 power state on NVME
+ACTION=="add|change", SUBSYSTEMS=="pci", DRIVERS=="nvme", TEST=="d3cold_allowed", ATTR{d3cold_allowed}="0"

@@ -1,0 +1,5 @@
+# Disable APST Power Management
+# Fix / Prevent freeze in the system
+# Same as nvme_core.default_ps_max_latency_us=0 in the kernel boot line
+# /sys/block/nvme*/device/power/pm_qos_latency_tolerance_us
+ACTION=="add|change", KERNEL=="nvme[0-9]*",SUBSYSTEMS=="nvme",ATTR{power/pm_qos_latency_tolerance_us}="0"
