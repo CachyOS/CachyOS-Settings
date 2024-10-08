@@ -4,7 +4,7 @@
 # https://www.kernel.org/doc/Documentation/usb/power-management.txt
 # An example would be to check values you find on /dev/input/by-id/
 # udevadm info -a -n /dev/input/by-id/YOUR_DEVICE
-ACTION=="add|change", SUBSYSTEMS=="usb", ATTR{power/autosuspend}="-1"
-ACTION=="add|change", SUBSYSTEMS=="usb", ATTR{power/autosuspend_delay_ms}="-1"
-ACTION=="add|change", SUBSYSTEMS=="input", ATTR{power/autosuspend}="-1"
-ACTION=="add|change", SUBSYSTEMS=="input", ATTR{power/autosuspend_delay_ms}="-1"
+ACTION=="add|change", SUBSYSTEMS=="usb", TEST=="power/autosuspend", ATTR{power/autosuspend}="-1"
+ACTION=="add|change", SUBSYSTEMS=="usb", TEST=="power/autosuspend_delay_ms", ATTR{power/autosuspend_delay_ms}="-1"
+ACTION=="add|change", SUBSYSTEMS=="input", TEST=="power/autosuspend", ATTR{power/autosuspend}="-1"
+ACTION=="add|change", SUBSYSTEMS=="input", TEST=="power/autosuspend_delay_ms", ATTR{power/autosuspend_delay_ms}="-1"
