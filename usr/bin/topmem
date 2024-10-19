@@ -180,7 +180,7 @@ local function main()
             local shift = true
 
             for value in string.gmatch(arg[i], "([^=]+)") do
-                if value ~= "--sort" then
+                if value ~= "--sort" and value ~= "-s" then
                     criteria = value
                     shift = false
                     break
