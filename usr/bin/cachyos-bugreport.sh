@@ -34,6 +34,19 @@ check_oldlog() {
 }
 
 
+check_wpermission() {
+    if ! touch "$LOG_FILENAME" 2>/dev/null; then
+        cat << EOF >&2
+
+ERROR: Working directory is not writable; please cd to a directory
+       where you have write permission so that the $LOG_FILENAME
+       file can be written.
+
+EOF
+        exit 1
+    fi
+}
+
 bugreport() {
     echo "Starting with bugreport"
 
@@ -77,5 +90,6 @@ upload() {
 
 check_root
 check_oldlog
+check_wpermission
 bugreport
 upload
