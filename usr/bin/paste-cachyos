@@ -1,15 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Change the url accordingly
 URL="https://paste.cachyos.org"
 
 FILEPATH="$1"
-FILENAME=$(basename -- "$FILEPATH")
+FILENAME="$(basename -- "$FILEPATH")"
 EXTENSION="${FILENAME##*.}"
 
-RESPONSE=$(curl --data-binary @${FILEPATH:-/dev/stdin} --url $URL)
-PASTELINK="$URL$RESPONSE"
+RESPONSE="$(curl --data-binary @"${FILEPATH:-/dev/stdin}" --url $URL)"
+PASTELINK="${URL}${RESPONSE}"
 
 [ -z "$EXTENSION" ] && \
     echo "$PASTELINK" || \
-    echo "$PASTELINK.$EXTENSION"
+    echo "${PASTELINK}.${EXTENSION}"

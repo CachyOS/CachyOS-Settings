@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # sbctl-batch-sign is a helper script designed to make it easier for users to sign files needed for secure boot support.
 # The obvious case in which this script helps a lot is when dual booting Windows as there are a lot of files by Windows that

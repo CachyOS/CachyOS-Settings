@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Helper script to enable the performance gov with proton or others
 
 # Don't fail if the cpu driver doesn't support performance power profile
