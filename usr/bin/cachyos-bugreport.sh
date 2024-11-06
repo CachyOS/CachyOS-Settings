@@ -1,14 +1,12 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 # CachyOS bug reporting shell script.  This shell
 # script will generate a log file named "cachyos-bug-report.log".
 
-LOG_FILENAME=cachyos-bugreport.log
+LOG_FILENAME="${LOG_FILENAME:-"cachyos-bugreport.log"}"
 OLD_LOG_FILENAME=cachyos-bugreport.log.old
 
 ask_yes_no(){
-    answer="${1}"
-    question="${2}"
+    local question="${1}"
     while ! printf '%s' "${answer}" | grep -q '^\([Yy]\(es\)\?\|[Nn]\(o\)\?\)$'; do
         printf '%s' "${question} [Y]es/[N]o: "
         read -r answer
@@ -19,15 +17,10 @@ ask_yes_no(){
     fi
 }
 
-print_error(){
-    message="${1}"
-    printf '%s\n' "Error: ${message}" >&2
-}
-
 check_root(){
-    # check that we are root, required for dmesg
-    if [ $(id -u) -ne 0 ]; then
-        echo "ERROR: Please run $(basename "$0") as root."
+    # Check that we are root, required for dmesg
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "ERROR: Please run $(basename "$0") as root." >&2
         exit 1
     fi
 }
@@ -35,55 +28,48 @@ check_root(){
 
 # move any old log file
 check_oldlog() {
-    if [ -f $LOG_FILENAME ]; then
-        mv $LOG_FILENAME $OLD_LOG_FILENAME
+    if [ -f "$LOG_FILENAME" ]; then
+        mv "$LOG_FILENAME" "$OLD_LOG_FILENAME"
     fi
 }
 
-
-check_wpermission() {
-    touch $LOG_FILENAME 2> /dev/null
-    if [ $? -ne 0 ]; then
-        echo
-        echo "ERROR: Working directory is not writable; please cd to a directory"
-        echo "       where you have write permission so that the $LOG_FILENAME"
-        echo "       file can be written."
-        echo
-        exit 1
-    fi
-}
 
 bugreport() {
     echo "Starting with bugreport"
 
-    # print prologue to the log file
-    echo "____________________________________________"                    >> $LOG_FILENAME
-    echo ""                                                                >> $LOG_FILENAME
-    echo "Start of CachyOS bug report log file. Please send this report,"  >> $LOG_FILENAME
-    echo "along with a description of your bug, to CachyOS."               >> $LOG_FILENAME
-    echo ""                                                                >> $LOG_FILENAME
-    echo ""                                                                >> $LOG_FILENAME
-    echo "Date: $(date)"                                                   >> $LOG_FILENAME
-    echo "uname: $(uname -a)"                                              >> $LOG_FILENAME
-    echo ""                                                                >> $LOG_FILENAME
+    cat << EOF >"$LOG_FILENAME"
+____________________________________________
 
-    echo "Getting Hardware Information"
-    inxi -F >> $LOG_FILENAME
+Start of CachyOS bug report log file. Please send this report,
+along with a description of your bug, to CachyOS.
 
-    echo "dmesg"
-    dmesg >> $LOG_FILENAME
+Date: $(date)
+uname: $(uname -a)
 
-    echo "journalctl of current boot"
-    journalctl -b -p 4..1 >> $LOG_FILENAME
+____________________________________________
+Getting Hardware Information
+
+$(inxi -F)
+
+____________________________________________
+
+dmesg
+
+$(dmesg)
+
+____________________________________________
+journalctl of current boot
+
+$(journalctl -b -p 4..1)
+____________________________________________
+EOF
 }
 
 upload() {
-    if ask_yes_no "${upload_log}" 'Do you want to upload this log to https://paste.cachyos.org?'; then
-        upload_log='yes'
+    if ask_yes_no 'Do you want to upload this log to https://paste.cachyos.org?'; then
         echo "Uploading Log"
-        cat $LOG_FILENAME | paste-cachyos
+        paste-cachyos "$LOG_FILENAME"
     else
-        upload_log='no'
         echo "Not uploading Log"
     fi
 
@@ -91,6 +77,5 @@ upload() {
 
 check_root
 check_oldlog
-check_wpermission
 bugreport
 upload
