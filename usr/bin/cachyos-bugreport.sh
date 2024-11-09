@@ -63,6 +63,13 @@ ____________________________________________
 Getting Hardware Information
 
 $(inxi -F)
+____________________________________________
+Getting Scheduler information
+
+sched-ext:
+$(grep -R "" /sys/kernel/sched_ext/)
+
+$(journalctl --output cat -k | grep -i scheduler)
 
 ____________________________________________
 
