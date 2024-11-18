@@ -13,11 +13,8 @@ $(/lib64/ld-linux-x86-64.so.2 --help | grep "(supported, searched)")
 
 Check CPU config:
 
-$(zgrep -iE 'CONFIG_(GENERIC_CPU(=| is)|X86_64_VERSION|MZEN|MNATIVE_AMD)' /proc/config.gz)
+$(zgrep -iE 'CONFIG_(GENERIC_CPU(=| is)|X86_64_VERSION|MZEN|MBULLDOZER|MPILEDRIVER|MSTREAMROLLER|MEXCAVATOR|MBOBCAT|MJAGUAR|MK10|MK8SSE3|MATOM|MGOLDMONTPLUS|MSKYLAKE2|MIVYBRIDGE|MICELAKE|MNATIVE_INTEL|MNATIVE_AMD)' /proc/config.gz)
 
-Check some configuration variables:
-
-$(zgrep -iE 'CONFIG_(SCHED_CLASS_EXT|AUTOFDO_CLANG)' /proc/config.gz)
 
 Current disk schedulers:
 
@@ -28,5 +25,5 @@ done)
 
 Check available schedulers:
 
-$(journalctl -k | grep -i scheduler)
+$(journalctl --output cat -k | grep -i scheduler)
 EOF
