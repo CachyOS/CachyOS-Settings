@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+export MESA_LOADER_DRIVER_OVERRIDE=zink
+export GALLIUM_DRIVER=zink
+exec "$@"
