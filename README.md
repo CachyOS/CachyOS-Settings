@@ -25,3 +25,4 @@ This repository contains configuration files that tweak sysctl values, add udev 
 - Easily switch between amdpstate-epp and amdpstate-guided
 - Upload logs with paste-cachyos, for example: sudo dmesg | paste-cachyos
 - View up to 10 process memory/swap usage (topmem)
+- Run OpenGL programs with the Zink Gallium driver using the zink-run wrapper
