@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
 # Helper script to enable the performance gov with proton or others
+if ! command -v powerprofilesctl &>/dev/null; then
+    echo "Error: powerprofilesctl not found" >&2
+    exit  1
+fi
 
-# Don't fail if the cpu driver doesn't support performance power profile
+# Don't fail if the CPU driver doesn't support performance power profile
 if ! powerprofilesctl list | grep -q 'performance:'; then
     exec "$@"
 fi
 
-# set performance governors, as long the game is launched
-exec powerprofilesctl launch -p performance -r "Launched with CachyOS game-performance utility" -- "$@"
+# Set performance governors, as long the game is launched
+if [ -n "$GAME_PERFORMANCE_SCREENSAVER_ON" ]; then
+    exec powerprofilesctl launch -p performance \
+        -r "Launched with CachyOS game-performance utility" -- "$@"
+else
+    exec systemd-inhibit --why "CachyOS game-performance is running" powerprofilesctl launch \
+        -p performance -r "Launched with CachyOS game-performance utility" -- "$@"
+fi
