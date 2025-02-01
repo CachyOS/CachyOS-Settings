@@ -10,11 +10,18 @@ if ! powerprofilesctl list | grep -q 'performance:'; then
     exec "$@"
 fi
 
+# Prevents CPU from going into sleep states so as not to create latency spikes.
+if [[ -n "$GAME_PERFORMANCE_CPU_LOW_LATENCY" && -w /dev/cpu_dma_latency ]]; then
+    exec 5>/dev/cpu_dma_latency
+    echo 0 >&5
+    trap 'exec 5>&-' EXIT
+fi
+
 # Set performance governors, as long the game is launched
 if [ -n "$GAME_PERFORMANCE_SCREENSAVER_ON" ]; then
-    exec powerprofilesctl launch -p performance \
+    powerprofilesctl launch -p performance \
         -r "Launched with CachyOS game-performance utility" -- "$@"
 else
-    exec systemd-inhibit --why "CachyOS game-performance is running" powerprofilesctl launch \
+    systemd-inhibit --why "CachyOS game-performance is running" powerprofilesctl launch \
         -p performance -r "Launched with CachyOS game-performance utility" -- "$@"
 fi
