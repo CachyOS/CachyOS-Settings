@@ -47,6 +47,16 @@ EOF
     fi
 }
 
+get_installed_packages() {
+    if [ -e /var/lib/pacman/sync/cachyos-v4.db ]; then
+        pacman -Ss | grep --color=never "^cachyos-v4/.*\[installed\]"
+    elif [ -e /var/lib/pacman/sync/cachyos-v3.db ]; then
+        pacman -Ss | grep --color=never "^cachyos-v3/.*\[installed\]"
+    else
+        echo "v4 nor v3 repositories are not used"
+    fi
+}
+
 bugreport() {
     echo "Starting with bugreport"
 
@@ -82,6 +92,11 @@ journalctl of current boot
 
 $(journalctl -b -p 4..1)
 ____________________________________________
+
+Installed packages
+
+$(get_installed_packages)
+--------------------------------------------
 EOF
 }
 
