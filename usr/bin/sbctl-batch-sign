@@ -12,5 +12,5 @@ fi
 if [ "$#" -eq 0 ]; then
     while IFS= read -r entries; do
         sbctl sign -s $entries
-    done < <(sort -u <(sbctl verify | grep 'signed' | cut -d' ' -f2) <(find /boot -maxdepth 1 -type f | grep vmlinuz))
+    done < <(sort -u <(sbctl verify | grep '✗' | cut -d' ' -f2) <(find /boot -maxdepth 1 -type f | grep vmlinuz))
 fi
