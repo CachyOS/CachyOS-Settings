@@ -11,6 +11,13 @@ fi
 
 if [ "$#" -eq 0 ]; then
     while IFS= read -r entries; do
+        # We expect users who use this script to enroll their
+        # own keys alongside Microsoft's.
+        # With that in mind, there's no need to sign MS ESP
+        # files with our own keys.
+        if [[ "$entries" =~ ^.*/EFI/(Microsoft|Windows) ]]; then
+            continue
+        fi
         sbctl sign -s $entries
     done < <(sort -u <(sbctl verify | awk '/✗/ {print $2}') <(find /boot -maxdepth 1 -type f -name vmlinuz*))
 fi
