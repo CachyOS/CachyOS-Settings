@@ -10,14 +10,21 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    while IFS= read -r entries; do
+    sbctl_files="$(sbctl verify | awk '/✗/ {print $2}')"
+    vmlinuz_files="$(find /boot -maxdepth 1 -type f -name "vmlinuz*")"
+    entries=""
+    [[ -n "$sbctl_files" ]] && entries+="$sbctl_files"
+    [[ -n "$sbctl_files" && -n "$vmlinuz_files" ]] && entries+="\n"
+    [[ -n "$vmlinuz_files" ]] && entries+="$vmlinuz_files"
+
+    echo -en "${entries}" | sort -u | while IFS= read -r entry; do
         # We expect users who use this script to enroll their
         # own keys alongside Microsoft's.
         # With that in mind, there's no need to sign MS ESP
         # files with our own keys.
-        if [[ "$entries" =~ ^.*/EFI/(Microsoft|Windows) ]]; then
+        if [[ "$entry" =~ ^.*/EFI/(Microsoft|Windows) ]]; then
             continue
         fi
-        sbctl sign -s $entries
-    done < <(sort -u <(sbctl verify | awk '/✗/ {print $2}') <(find /boot -maxdepth 1 -type f -name vmlinuz*))
+        sbctl sign -s "$entry"
+    done
 fi
