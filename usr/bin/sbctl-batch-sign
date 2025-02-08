@@ -10,14 +10,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    sbctl_files="$(sbctl verify 2>/dev/null | awk '/✗/ {print $2}')"
-    vmlinuz_files="$(find /boot -maxdepth 1 -type f -name "vmlinuz*" 2>/dev/null)"
-    entries=""
-    [[ -n "$sbctl_files" ]] && entries+="$sbctl_files"
-    [[ -n "$sbctl_files" && -n "$vmlinuz_files" ]] && entries+="\n"
-    [[ -n "$vmlinuz_files" ]] && entries+="$vmlinuz_files"
+    export ESP_PATH=/boot
 
-    echo -en "${entries}" | sort -u | while IFS= read -r entry; do
+    sbctl verify 2>/dev/null | awk '/✗/ {print $2}' | while IFS= read -r entry; do
         # We expect users who use this script to enroll their
         # own keys alongside Microsoft's.
         # With that in mind, there's no need to sign MS ESP
