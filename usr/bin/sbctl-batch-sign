@@ -17,7 +17,8 @@ if [ "$#" -eq 0 ]; then
         # own keys alongside Microsoft's.
         # With that in mind, there's no need to sign MS ESP
         # files with our own keys.
-        if [[ "$entry" =~ ^.*/EFI/(Microsoft|Windows) || "$entry" == *.mui || "$entry" == *.dll ]]; then
+        if [[ "$entry" =~ ^.*/EFI/(Microsoft|Windows) || "$entry" == *.mui || "$entry" == *.dll
+            || "$entry" =~ ^/boot/grub ]]; then
             continue
         fi
         sbctl sign -s "$entry"
