@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Uncomment to use additional variables
-# source ./game-variables.sh
+# Optional script, modify based on your needs.
+source ./game-variables.sh
 
 # Helper script to enable the performance gov with proton or others
 if ! command -v powerprofilesctl &>/dev/null; then

@@ -1,6 +1,7 @@
 #!/usr/bin/bash
 
-# Uncomment or Comment what you might want to use or not.
+# This is an optional script, comment the exit, to have it executed.
+exit
 
 ############################################################################
 
