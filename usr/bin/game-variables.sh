@@ -32,7 +32,7 @@ export LD_PRELOAD=""
 
 # Reduce input lag, in exchange of a bit lower fps
 # https://github.com/HansKristian-Work/vkd3d-proton/issues/2273
-export VKD3D_SWAPCHAIN_LATENCY_FRAMES=2
+# export VKD3D_SWAPCHAIN_LATENCY_FRAMES=2
 
 # May work like DXVK numBackBuffers, which low value could reduce latency in some way.
 # export VKD3D_SWAPCHAIN_IMAGES=1
