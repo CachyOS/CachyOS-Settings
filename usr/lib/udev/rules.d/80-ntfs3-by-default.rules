@@ -1,2 +1,2 @@
 # Mount NTFS partitions as NTFS3 partitions without explicitly specifying NTFS3
-SUBSYSTEM=="block", TEST!="/usr/bin/ntfs-3g", ENV{ID_FS_TYPE}=="ntfs", ENV{ID_FS_TYPE}="ntfs3"
+SUBSYSTEM=="block", ENV{ID_FS_TYPE}=="ntfs", ENV{ID_FS_TYPE}="ntfs3"
