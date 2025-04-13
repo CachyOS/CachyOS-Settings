@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-
-## Set amd-pstate to guided
-echo guided | sudo tee /sys/devices/system/cpu/amd_pstate/status 
-## Set gov to schedutil
-sudo cpupower frequency-set -g schedutil
