@@ -5,9 +5,14 @@
 # needs to be signed in EFI.
 set -e
 
+if [ -f /boot/limine.conf ]; then
+    echo "Limine detected, please do not use this script."
+    exit 0
+fi
+
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Error: This script must be run with root privileges."
-  exit 1
+    echo "Error: This script must be run with root privileges."
+    exit 1
 fi
 
 if [ "$#" -eq 0 ]; then
