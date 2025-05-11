@@ -52,8 +52,10 @@ get_installed_packages() {
         pacman -Ss | grep --color=never "^cachyos-v4/.*\[installed\]"
     elif [ -e /var/lib/pacman/sync/cachyos-v3.db ]; then
         pacman -Ss | grep --color=never "^cachyos-v3/.*\[installed\]"
+    elif [ -e /var/lib/pacman/sync/cachyos-znver4.db ]; then
+        pacman -Ss | grep --color=never "^cachyos-znver4/.*\[installed\]"
     else
-        echo "v4 nor v3 repositories are not used"
+        echo "znver4, v4 or v3 repositories are not used"
     fi
 }
 
