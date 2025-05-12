@@ -9,6 +9,10 @@ TEST!="/dev/zram0", GOTO="zram_end"
 # the page cache as hermetic as possible, because otherwise it is "expensive"
 # to read data from disk again. At the same time, uncompressing pages from ZRAM
 # is not as expensive and is usually very fast on modern CPUs.
-SYSCTL{vm.swappiness}="150"
+SYSCTL{vm.swappiness}="180"
+
+# Based on https://wiki.archlinux.org/title/Zram#Optimizing%20swap%20on%20zram 
+SYSCTL{vm.watermark_scale_factor}="125"
+
 
 LABEL="zram_end"
