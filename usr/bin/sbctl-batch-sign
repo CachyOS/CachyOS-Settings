@@ -15,18 +15,15 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-if [ "$#" -eq 0 ]; then
-    export ESP_PATH=/boot
-
-    sbctl verify 2>/dev/null | awk '/✗/ {print $2}' | while IFS= read -r entry; do
-        # We expect users who use this script to enroll their
-        # own keys alongside Microsoft's.
-        # With that in mind, there's no need to sign MS ESP
-        # files with our own keys.
-        if [[ "$entry" =~ ^.*/EFI/(Microsoft|Windows) || "$entry" == *.mui || "$entry" == *.dll
-            || "$entry" =~ ^/boot/grub ]]; then
-            continue
-        fi
-        sbctl sign -s "$entry"
-    done
-fi
+export ESP_PATH=/boot
+sbctl verify 2>/dev/null | awk '/✗/ {print $2}' | while IFS= read -r entry; do
+    # We expect users who use this script to enroll their
+    # own keys alongside Microsoft's.
+    # With that in mind, there's no need to sign MS ESP
+    # files with our own keys.
+    if [[ "$entry" =~ ^.*/EFI/(Microsoft|Windows) || "$entry" == *.mui || "$entry" == *.dll
+        || "$entry" =~ ^/boot/grub ]]; then
+        continue
+    fi
+    sbctl sign -s "$entry"
+done
