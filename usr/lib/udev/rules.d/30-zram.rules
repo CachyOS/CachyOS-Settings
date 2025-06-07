@@ -1,5 +1,3 @@
-TEST!="/dev/zram0", GOTO="zram_end"
-
 # When used with ZRAM, it is better to prefer page out only anonymous pages,
 # because it ensures that they do not go out of memory, but will be just
 # compressed. If we do frequent flushing of file pages, that increases the
@@ -9,6 +7,8 @@ TEST!="/dev/zram0", GOTO="zram_end"
 # the page cache as hermetic as possible, because otherwise it is "expensive"
 # to read data from disk again. At the same time, uncompressing pages from ZRAM
 # is not as expensive and is usually very fast on modern CPUs.
-SYSCTL{vm.swappiness}="150"
-
-LABEL="zram_end"
+#
+# Also it's better to disable Zswap, as this may prevent ZRAM from working
+# properly or keeping a proper count of compressed pages via zramctl.
+ACTION=="change", KERNEL=="zram0", ATTR{initstate}=="1", SYSCTL{vm.swappiness}="150", \
+    RUN+="/bin/sh -c 'echo N > /sys/module/zswap/parameters/enabled'"
