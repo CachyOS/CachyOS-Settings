@@ -2,7 +2,7 @@
 # running on battery power. This is needed because it prevents audio cracks on
 # some hardware.
 SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", TEST=="/sys/module/snd_hda_intel", \
-    RUN+="/bin/sh -c 'echo Y > /sys/module/snd_hda_intel/parameters/power_save_controller'"
+    RUN+="/bin/sh -c 'echo 0 > /sys/module/snd_hda_intel/parameters/power_save'"
 
 SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="1", TEST=="/sys/module/snd_hda_intel", \
-    RUN+="/bin/sh -c 'echo $(grep -w -q 0x10de /sys/module/snd_hda_intel/drivers/*/*/vendor && echo Y || echo N) > /sys/module/snd_hda_intel/parameters/power_save_controller'"
+    RUN+="/bin/sh -c 'echo 10 > /sys/module/snd_hda_intel/parameters/power_save'"
