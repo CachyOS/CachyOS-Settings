@@ -74,7 +74,7 @@ uname: $(uname -a)
 ____________________________________________
 Getting Hardware Information
 
-$(inxi -F)
+$(inxi -Farz)
 ____________________________________________
 Getting Scheduler information
 
