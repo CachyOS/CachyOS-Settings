@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+POLLING_INTERVAL=5
+
+#######################################
+# Guard clause
+#######################################
+if ! command -v powerprofilesctl &>/dev/null; then
+    echo "powerprofilesctl not found" >&2
+    exit 1
+fi
+
+#######################################
+# Returns: true  - If a game is running.
+#          false - Otherwise.
+#######################################
+is_game_running() {
+    # Steam game is running — very specific
+    pgrep -f "steamapps/common" >/dev/null && return 0
+
+    # Lutris (native or Flatpak)
+    pgrep -fi "lutris" >/dev/null && return 0
+
+    # Heroic (native or Flatpak)
+    pgrep -fi "heroic" >/dev/null && return 0
+
+    # Bottles (native or Flatpak)
+    pgrep -fi "bottles" >/dev/null && return 0
+
+    # GameHub (native or Flatpak)
+    pgrep -fi "gamehub" >/dev/null && return 0
+
+    # RetroArch (native or Flatpak)
+    pgrep -fi "retroarch" >/dev/null && return 0
+
+    return 1
+}
+
+#######################################
+# Poll every n seconds 
+#######################################
+state=""
+while true; do
+    if is_game_running; then
+        if [[ "$state" != "performance" ]]; then
+            echo "Setting power profile to performance"
+            powerprofilesctl set performance
+            state="performance"
+        fi
+    else
+        if [[ "$state" != "balanced" ]]; then
+            echo "Setting power profile to balanced"
+            powerprofilesctl set balanced
+            state="balanced"
+        fi
+    fi
+    sleep "$POLLING_INTERVAL"
+done
