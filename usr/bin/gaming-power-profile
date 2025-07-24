@@ -11,11 +11,10 @@ if ! command -v powerprofilesctl &>/dev/null; then
 fi
 
 #######################################
-# Returns: true  - If a game is running.
-#          false - Otherwise.
+# Game detection
 #######################################
 is_game_running() {
-    # Steam game is running — very specific
+    # Steam game is running
     pgrep -f "steamapps/common" >/dev/null && return 0
 
     # Lutris (native or Flatpak)
@@ -37,22 +36,32 @@ is_game_running() {
 }
 
 #######################################
-# Poll every n seconds 
+# Main function
 #######################################
-state=""
-while true; do
-    if is_game_running; then
-        if [[ "$state" != "performance" ]]; then
-            echo "Setting power profile to performance"
-            powerprofilesctl set performance
-            state="performance"
+main() {
+    local state=""
+    while true; do
+        if is_game_running; then
+            if [[ "$state" != "performance" ]]; then
+                echo "Setting power profile to performance"
+                powerprofilesctl set performance
+                state="performance"
+            fi
+        else
+            if [[ "$state" != "balanced" ]]; then
+                echo "Setting power profile to balanced"
+                powerprofilesctl set balanced
+                state="balanced"
+            fi
         fi
-    else
-        if [[ "$state" != "balanced" ]]; then
-            echo "Setting power profile to balanced"
-            powerprofilesctl set balanced
-            state="balanced"
-        fi
-    fi
-    sleep "$POLLING_INTERVAL"
-done
+        sleep "$POLLING_INTERVAL"
+    done
+}
+
+#######################################
+# Run with systemd-inhibit
+#######################################
+exec systemd-inhibit --what=sleep \
+    --who="Gaming Power Profile" \
+    --why="Prevents the script from waking up the computer" \
+    bash -c "source \"$0\" && main"
