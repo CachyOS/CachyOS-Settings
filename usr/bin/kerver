@@ -24,8 +24,6 @@ function scx_sched {
 
     OPTIONS=""
     if [ -n "$PROCESS_CMD_LINE" ]; then
-        # Remove the program name itself, leaving only the options
-        # This assumes the program name is the first word
         OPTIONS=$(echo -n "$PROCESS_CMD_LINE" | sed -E "s/^[^[:space:]]+//; s/^[[:space:]]+//")
         if [ -n "$OPTIONS" ]; then
             OPTIONS="with options $OPTIONS"
@@ -33,7 +31,7 @@ function scx_sched {
     fi
 
     echo "$ENABLED_SCHEDULER_LINE $OPTIONS"
-}
+}https://github.com/CachyOS/CachyOS-Settings/pull/166
 
 cat << EOF
 Check kernel version:
