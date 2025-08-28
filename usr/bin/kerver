@@ -31,7 +31,7 @@ function scx_sched {
     fi
 
     echo "$ENABLED_SCHEDULER_LINE $OPTIONS"
-}https://github.com/CachyOS/CachyOS-Settings/pull/166
+}
 
 cat << EOF
 Check kernel version:
