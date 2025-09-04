@@ -48,14 +48,15 @@ EOF
 }
 
 get_installed_packages() {
-    if [ -e /var/lib/pacman/sync/cachyos-v4.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-v4/.*\[installed\]"
-    elif [ -e /var/lib/pacman/sync/cachyos-v3.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-v3/.*\[installed\]"
-    elif [ -e /var/lib/pacman/sync/cachyos-znver4.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-znver4/.*\[installed\]"
+    if pacman -Ss | awk '/\[installed\]/ {print $1,$2}'; then
+        :
     else
-        echo "znver4, v4 or v3 repositories are not used"
+        echo "There was a problem querying repository packages."
+    fi
+    if pacman -Qm | awk '{$1 = "foreign/"$1; print $0}'; then
+        :
+    else
+        echo "There was a problem querying foreign packages."
     fi
 }
 
