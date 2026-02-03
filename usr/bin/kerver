@@ -1,5 +1,40 @@
 #!/usr/bin/env bash
 
+function fetch_scheds {
+    echo "$(journalctl --output cat -k | grep -i scheduler | grep -Pv '^(?=.*sched_ext: BPF scheduler)(?=.*enabled)')"
+
+    ENABLED_SCHEDULER_LINE=$(journalctl --output cat -k | grep -i "sched_ext: BPF scheduler" | tail -n1 | grep "enabled")
+
+    if [ -z "$ENABLED_SCHEDULER_LINE" ]; then
+        # No sched_ext BPF scheduler found as enabled.
+        exit 0
+    fi
+
+    # Find scheduler used
+    SCHEDULER_NAME=$(echo "$ENABLED_SCHEDULER_LINE" | sed -n 's/.*BPF scheduler "\([^"]*\)".*/\1/p')
+
+    if [ -z "$SCHEDULER_NAME" ]; then
+        echo "Could not parse scheduler name from: $ENABLED_SCHEDULER_LINE"
+        exit 1
+    fi
+
+    # Find the scx scheduler process
+    PROCESS_HINT=$(echo "$SCHEDULER_NAME" | cut -d'_' -f1)
+
+    # Get the args
+    PROCESS_CMD_LINE=$(pgrep -fo "$PROCESS_HINT" | xargs -r ps -o cmd --pid | tr -d '\n')
+
+    OPTIONS=""
+    if [ -n "$PROCESS_CMD_LINE" ]; then
+        OPTIONS=$(echo -n "$PROCESS_CMD_LINE" | sed -E "s/^[^[:space:]]+//; s/^[[:space:]]+//")
+        if [ -n "$OPTIONS" ]; then
+            OPTIONS="with options $OPTIONS"
+        fi
+    fi
+
+    echo "$ENABLED_SCHEDULER_LINE $OPTIONS"
+}
+
 cat << EOF
 Check kernel version:
 
@@ -25,5 +60,6 @@ done)
 
 Check available schedulers:
 
-$(journalctl --output cat -k | grep -i scheduler)
+$(fetch_scheds)
 EOF
+
