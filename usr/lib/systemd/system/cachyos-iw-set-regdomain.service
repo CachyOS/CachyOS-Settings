@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: ISC
+# SPDX-FileCopyrightText: 2025 Thomas Duckworth <tduck@filotimoproject.org>
+
+[Unit]
+Description=Set Wireless Regulatory Domain on Timezone Change
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/iw-set-regdomain
