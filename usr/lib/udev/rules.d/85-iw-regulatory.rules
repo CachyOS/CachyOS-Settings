@@ -6,4 +6,4 @@
 # Set wireless regulatory domain at device creation
 # For more information see https://gitlab.com/VelocityLimitless/Projects/iw-setregdomain
 
-SUBSYSTEM=="ieee80211", ACTION=="add", RUN+="/usr/lib/iw-set-regdomain"
+SUBSYSTEM=="ieee80211", ACTION=="add", TAG+="systemd", ENV{SYSTEMD_WANTS}+="cachyos-iw-set-regdomain.service"

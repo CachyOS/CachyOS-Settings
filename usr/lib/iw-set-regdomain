@@ -38,13 +38,12 @@ getcountry() {
 	done < /usr/share/zoneinfo/zone.tab
 }
 
-if [ -f $REGDOMAIN ]
+if [ -f "$REGDOMAIN" ]
 then
-	# This should set COUNTRY
-	. $REGDOMAIN
+	COUNTRY=$(sed -n 's/^COUNTRY=//p' "$REGDOMAIN" | head -1)
 	if [ -n "$COUNTRY" ]
 	then
-		/usr/bin/iw reg set $COUNTRY
+		/usr/bin/iw reg set "$COUNTRY"
 		exit
 	fi
 fi
