@@ -2,11 +2,14 @@
 # CachyOS bug reporting shell script.  This shell
 # script will generate a log file named "cachyos-bug-report.log".
 
+set -euo pipefail
+
 LOG_FILENAME="${LOG_FILENAME:-"cachyos-bugreport.log"}"
 OLD_LOG_FILENAME=cachyos-bugreport.log.old
 
 ask_yes_no(){
     local question="${1}"
+    local answer=""
     while ! printf '%s' "${answer}" | grep -q '^\([Yy]\(es\)\?\|[Nn]\(o\)\?\)$'; do
         printf '%s' "${question} [Y]es/[N]o: "
         read -r answer
@@ -49,11 +52,11 @@ EOF
 
 get_installed_packages() {
     if [ -e /var/lib/pacman/sync/cachyos-v4.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-v4/.*\[installed\]"
+        pacman -Ss | grep --color=never "^cachyos-v4/.*\[installed\]" || true
     elif [ -e /var/lib/pacman/sync/cachyos-v3.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-v3/.*\[installed\]"
+        pacman -Ss | grep --color=never "^cachyos-v3/.*\[installed\]" || true
     elif [ -e /var/lib/pacman/sync/cachyos-znver4.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-znver4/.*\[installed\]"
+        pacman -Ss | grep --color=never "^cachyos-znver4/.*\[installed\]" || true
     else
         echo "znver4, v4 or v3 repositories are not used"
     fi
@@ -70,6 +73,7 @@ along with a description of your bug, to CachyOS.
 
 Date: $(date)
 uname: $(uname -a)
+cmdline: $(cat /proc/cmdline)
 
 ____________________________________________
 Getting Hardware Information
@@ -79,9 +83,9 @@ ____________________________________________
 Getting Scheduler information
 
 sched-ext:
-$(grep -R "" /sys/kernel/sched_ext/)
+$(grep -R "" /sys/kernel/sched_ext/ 2>/dev/null || echo "sched_ext not available")
 
-$(journalctl --output cat -k | grep -i scheduler)
+$(journalctl --output cat -k | grep -i scheduler || true)
 
 ____________________________________________
 
@@ -93,6 +97,10 @@ ____________________________________________
 journalctl of current boot
 
 $(journalctl -b -p 4..1)
+____________________________________________
+journalctl of previous boot
+
+$(journalctl -b -1 -p 4..1 2>/dev/null || echo "No previous boot log available")
 ____________________________________________
 
 Installed packages
