@@ -32,7 +32,7 @@ getcountry() {
 	do
 		if [ "$z" = "$ZONE" ]
 		then
-			echo $c
+			echo "$c"
 			break
 		fi
 	done < /usr/share/zoneinfo/zone.tab
@@ -50,7 +50,7 @@ fi
 
 if [ -f "$LOCALTIME" ]
 then
-	ZONE=$(readlink -f $LOCALTIME)
+	ZONE=$(readlink -f "$LOCALTIME")
 	ZONE=${ZONE#/usr/share/zoneinfo/}
 else
 	$LOGGER -s "Timezone information not found. Unable to set wireless regulatory domain."
@@ -79,4 +79,4 @@ then
 fi
 
 $LOGGER "Setting regulatory domain to $COUNTRY based on timezone ($ZONE)."
-/usr/bin/iw reg set $COUNTRY
+/usr/bin/iw reg set "$COUNTRY"

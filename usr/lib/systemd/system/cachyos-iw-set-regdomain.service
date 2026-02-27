@@ -3,6 +3,7 @@
 
 [Unit]
 Description=Set Wireless Regulatory Domain on Timezone Change
+After=local-fs.target
 
 [Service]
 Type=oneshot
