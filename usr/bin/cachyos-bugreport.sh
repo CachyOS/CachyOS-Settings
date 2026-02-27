@@ -110,6 +110,41 @@ $(get_installed_packages)
 EOF
 }
 
+redact() {
+    echo "Redacting personal information..."
+
+    local sed_args=()
+
+    # Escape a literal string for use in a sed pattern (] must be first in class)
+    sed_escape() { printf '%s\n' "$1" | sed 's/[][\\.^$*|]/\\&/g'; }
+
+    # Redact hostname (appears in uname, dmesg, journalctl)
+    local hn
+    hn=$(hostname)
+    sed_args+=(-e "s|$(sed_escape "$hn")|<hostname-redacted>|g")
+
+    # Redact real username and home directory (SUDO_USER is set when run via sudo)
+    local real_user="${SUDO_USER:-}"
+    if [ -n "$real_user" ] && [ "$real_user" != "root" ]; then
+        local escaped_user
+        escaped_user=$(sed_escape "$real_user")
+        sed_args+=(-e "s|/home/${escaped_user}|<home-dir-redacted>|g")
+        sed_args+=(-e "s|${escaped_user}|<username-redacted>|g")
+    fi
+
+    # Redact IPv4 addresses (inxi -z handles its own output; this covers dmesg/journal)
+    sed_args+=(-e 's/\b\([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}\b/<ipv4-redacted>/g')
+
+    # Redact MAC addresses (fallback for anything inxi -z may have missed)
+    sed_args+=(-e 's/\b\([0-9a-fA-F]\{2\}:\)\{5\}[0-9a-fA-F]\{2\}\b/<mac-address-redacted>/g')
+
+    # Redact email addresses
+    sed_args+=(-e 's/[a-zA-Z0-9._%+-]\+@[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}/<email-address-redacted>/g')
+
+    # Single sed pass for all substitutions
+    sed -i "${sed_args[@]}" "$LOG_FILENAME"
+}
+
 upload() {
     if ask_yes_no 'Do you want to upload this log to https://paste.cachyos.org?'; then
         echo "Uploading Log"
@@ -124,4 +159,5 @@ check_root
 check_oldlog
 check_wpermission
 bugreport
+redact
 upload
