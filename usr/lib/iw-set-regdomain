@@ -23,7 +23,6 @@
 #
 
 REGDOMAIN=/etc/iw-regdomain
-LOCALTIME=/etc/localtime
 
 LOGGER="/usr/bin/logger -t iw-set-regdomain"
 
@@ -48,16 +47,9 @@ then
 	fi
 fi
 
-if [ -f "$LOCALTIME" ]
-then
-	ZONE=$(readlink -f "$LOCALTIME")
-	ZONE=${ZONE#/usr/share/zoneinfo/}
-else
-	$LOGGER -s "Timezone information not found. Unable to set wireless regulatory domain."
-	exit 1
-fi
+ZONE=$(timedatectl show -P Timezone 2>/dev/null)
 
-if [ -z "$ZONE" -o "$ZONE" = "$LOCALTIME" ]
+if [ -z "$ZONE" ]
 then
 	$LOGGER -s "Could not determine timezone. Unable to set wireless regulatory domain."
 	exit 1
