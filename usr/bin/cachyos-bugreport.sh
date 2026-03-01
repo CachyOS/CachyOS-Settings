@@ -2,11 +2,14 @@
 # CachyOS bug reporting shell script.  This shell
 # script will generate a log file named "cachyos-bug-report.log".
 
+set -euo pipefail
+
 LOG_FILENAME="${LOG_FILENAME:-"cachyos-bugreport.log"}"
 OLD_LOG_FILENAME=cachyos-bugreport.log.old
 
 ask_yes_no(){
     local question="${1}"
+    local answer=""
     while ! printf '%s' "${answer}" | grep -q '^\([Yy]\(es\)\?\|[Nn]\(o\)\?\)$'; do
         printf '%s' "${question} [Y]es/[N]o: "
         read -r answer
@@ -49,11 +52,11 @@ EOF
 
 get_installed_packages() {
     if [ -e /var/lib/pacman/sync/cachyos-v4.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-v4/.*\[installed\]"
+        pacman -Ss | grep --color=never "^cachyos-v4/.*\[installed\]" || true
     elif [ -e /var/lib/pacman/sync/cachyos-v3.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-v3/.*\[installed\]"
+        pacman -Ss | grep --color=never "^cachyos-v3/.*\[installed\]" || true
     elif [ -e /var/lib/pacman/sync/cachyos-znver4.db ]; then
-        pacman -Ss | grep --color=never "^cachyos-znver4/.*\[installed\]"
+        pacman -Ss | grep --color=never "^cachyos-znver4/.*\[installed\]" || true
     else
         echo "znver4, v4 or v3 repositories are not used"
     fi
@@ -70,6 +73,7 @@ along with a description of your bug, to CachyOS.
 
 Date: $(date)
 uname: $(uname -a)
+cmdline: $(cat /proc/cmdline)
 
 ____________________________________________
 Getting Hardware Information
@@ -79,9 +83,9 @@ ____________________________________________
 Getting Scheduler information
 
 sched-ext:
-$(grep -R "" /sys/kernel/sched_ext/)
+$(grep -R "" /sys/kernel/sched_ext/ 2>/dev/null || echo "sched_ext not available")
 
-$(journalctl --output cat -k | grep -i scheduler)
+$(journalctl --output cat -k | grep -i scheduler || true)
 
 ____________________________________________
 
@@ -94,12 +98,51 @@ journalctl of current boot
 
 $(journalctl -b -p 4..1)
 ____________________________________________
+journalctl of previous boot
+
+$(journalctl -b -1 -p 4..1 2>/dev/null || echo "No previous boot log available")
+____________________________________________
 
 Installed packages
 
 $(get_installed_packages)
 --------------------------------------------
 EOF
+}
+
+redact() {
+    echo "Redacting personal information..."
+
+    local sed_args=()
+
+    # Escape a literal string for use in a sed pattern (] must be first in class)
+    sed_escape() { printf '%s\n' "$1" | sed 's/[][\\.^$*|]/\\&/g'; }
+
+    # Redact hostname (appears in uname, dmesg, journalctl)
+    local hn
+    hn=$(hostname)
+    sed_args+=(-e "s|$(sed_escape "$hn")|<hostname-redacted>|g")
+
+    # Redact real username and home directory (SUDO_USER is set when run via sudo)
+    local real_user="${SUDO_USER:-}"
+    if [ -n "$real_user" ] && [ "$real_user" != "root" ]; then
+        local escaped_user
+        escaped_user=$(sed_escape "$real_user")
+        sed_args+=(-e "s|/home/${escaped_user}|<home-dir-redacted>|g")
+        sed_args+=(-e "s|${escaped_user}|<username-redacted>|g")
+    fi
+
+    # Redact IPv4 addresses (inxi -z handles its own output; this covers dmesg/journal)
+    sed_args+=(-e 's/\b\([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}\b/<ipv4-redacted>/g')
+
+    # Redact MAC addresses (fallback for anything inxi -z may have missed)
+    sed_args+=(-e 's/\b\([0-9a-fA-F]\{2\}:\)\{5\}[0-9a-fA-F]\{2\}\b/<mac-address-redacted>/g')
+
+    # Redact email addresses
+    sed_args+=(-e 's/[a-zA-Z0-9._%+-]\+@[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}/<email-address-redacted>/g')
+
+    # Single sed pass for all substitutions
+    sed -i "${sed_args[@]}" "$LOG_FILENAME"
 }
 
 upload() {
@@ -116,4 +159,5 @@ check_root
 check_oldlog
 check_wpermission
 bugreport
+redact
 upload
