@@ -1,0 +1,3 @@
+[Logitech G502]
+MatchName=*Logitech G502*
+AttrEventCode=-REL_WHEEL_HI_RES;-REL_WHEEL_HI_RES;
