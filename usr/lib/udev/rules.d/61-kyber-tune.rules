@@ -1,0 +1,6 @@
+# Tune Kyber I/O scheduler latency targets for NVMe devices.
+# Runs after 60-ioschedulers.rules sets the scheduler.
+
+ACTION=="add|change", KERNEL=="nvme[0-9]*", DEVTYPE=="disk", \
+    TEST=="queue/iosched/read_lat_nsec", \
+    RUN+="/usr/lib/cachyos-kyber-tune %k"

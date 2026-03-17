@@ -1,0 +1,214 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# SPDX-FileCopyrightText: 2026 CachyOS Team
+#
+# Tune Kyber I/O scheduler latency targets per NVMe device.
+# Called by udev (61-kyber-tune.rules) with the block device name as $1.
+
+DEV="$1"
+
+if [ -z "$DEV" ]; then
+	echo "Usage: $0 <block-device>" >&2
+	exit 1
+fi
+
+SYSBLOCK="/sys/block/$DEV"
+IOSCHED="$SYSBLOCK/queue/iosched"
+LOGGER="/usr/bin/logger -t cachyos-kyber-tune"
+
+# Verify device and scheduler exist
+if [ ! -d "$IOSCHED" ] || [ ! -f "$IOSCHED/read_lat_nsec" ]; then
+	exit 0
+fi
+
+CONF="/etc/cachyos-kyber-tune.conf"
+
+# --- Read device info from sysfs ---
+
+MODEL=""
+if [ -f "$SYSBLOCK/device/model" ]; then
+	read -r MODEL < "$SYSBLOCK/device/model" 2>/dev/null
+	# Trim leading/trailing whitespace
+	MODEL="${MODEL## }"
+	MODEL="${MODEL%% }"
+fi
+UP_MODEL=$(echo "$MODEL" | tr '[:lower:]' '[:upper:]')
+
+# Resolve PCIe device path
+PCI_DEV=""
+if [ -L "$SYSBLOCK/device/device" ]; then
+	PCI_DEV=$(readlink -f "$SYSBLOCK/device/device")
+elif [ -L "$SYSBLOCK/device" ]; then
+	PCI_DEV=$(readlink -f "$SYSBLOCK/device")
+	while [ -n "$PCI_DEV" ] && [ "$PCI_DEV" != "/" ]; do
+		if [ -f "$PCI_DEV/current_link_speed" ]; then
+			break
+		fi
+		PCI_DEV="${PCI_DEV%/*}"
+	done
+fi
+
+LINK_SPEED=""
+LINK_WIDTH=""
+if [ -n "$PCI_DEV" ] && [ -f "$PCI_DEV/current_link_speed" ]; then
+	read -r LINK_SPEED < "$PCI_DEV/current_link_speed" 2>/dev/null
+	read -r LINK_WIDTH < "$PCI_DEV/current_link_width" 2>/dev/null
+fi
+
+# --- Parse optional config file ---
+
+# Look for [MODEL_SUBSTRING] or [DEFAULT] sections.
+# First matching device section wins; unset keys fall back to [DEFAULT].
+conf_read_lat=""
+conf_write_lat=""
+conf_nr_requests=""
+
+parse_config() {
+	[ -f "$CONF" ] || return
+
+	in_section=0
+	in_default=0
+	matched=0
+	def_read_lat=""
+	def_write_lat=""
+	def_nr_requests=""
+
+	while IFS= read -r line; do
+		# Strip inline comments
+		line="${line%%#*}"
+		# Skip empty/whitespace-only lines
+		case "$line" in
+		*[!\ \	]*) ;;
+		*) continue ;;
+		esac
+
+		# Section header
+		case "$line" in
+		\[*\])
+			section="${line#\[}"
+			section="${section%\]}"
+			# Trim whitespace
+			section="${section## }"
+			section="${section%% }"
+			if [ "$section" = "DEFAULT" ]; then
+				in_section=0
+				in_default=1
+			else
+				in_default=0
+				if [ "$matched" = "1" ]; then
+					in_section=0
+					continue
+				fi
+				up_section=$(echo "$section" | tr '[:lower:]' '[:upper:]')
+				case "$UP_MODEL" in
+				*"$up_section"*)
+					in_section=1
+					matched=1
+					;;
+				*)
+					in_section=0
+					;;
+				esac
+			fi
+			continue
+			;;
+		esac
+
+		# Skip lines without '='
+		case "$line" in
+		*=*) ;;
+		*) continue ;;
+		esac
+
+		# Key=value parsing using parameter expansion
+		key="${line%%=*}"
+		val="${line#*=}"
+		# Trim whitespace
+		key="${key## }"
+		key="${key%% }"
+		val="${val## }"
+		val="${val%% }"
+
+		if [ "$in_section" = "1" ]; then
+			case "$key" in
+			read_lat_nsec)  conf_read_lat="$val" ;;
+			write_lat_nsec) conf_write_lat="$val" ;;
+			nr_requests)    conf_nr_requests="$val" ;;
+			esac
+		elif [ "$in_default" = "1" ]; then
+			case "$key" in
+			read_lat_nsec)  def_read_lat="$val" ;;
+			write_lat_nsec) def_write_lat="$val" ;;
+			nr_requests)    def_nr_requests="$val" ;;
+			esac
+		fi
+	done < "$CONF"
+
+	# Per-device match takes priority, fall back to DEFAULT
+	[ -z "$conf_read_lat" ]    && conf_read_lat="$def_read_lat"
+	[ -z "$conf_write_lat" ]   && conf_write_lat="$def_write_lat"
+	[ -z "$conf_nr_requests" ] && conf_nr_requests="$def_nr_requests"
+}
+
+parse_config
+
+# --- Classify device tier ---
+
+set_tier() {
+	TIER="$1"
+	READ_LAT="$2"
+	WRITE_LAT="$3"
+	NR_REQ="$4"
+}
+
+TIER=""
+
+# 1) Config file override
+if [ -n "$conf_read_lat" ] && [ -n "$conf_write_lat" ]; then
+	set_tier config "$conf_read_lat" "$conf_write_lat" "${conf_nr_requests:-256}"
+fi
+
+# 2) Model pattern matching
+if [ -z "$TIER" ] && [ -n "$UP_MODEL" ]; then
+	case "$UP_MODEL" in
+	*OPTANE*|*P5800X*|*Z-SSD*|*ZSSD*)
+		set_tier optane 50000 100000 128
+		;;
+	*SN850X*|*990?PRO*|*980?PRO*|*SN850*|*KC3000*|*AORUS*GEN4*|*FIRECUDA*530*|*ROCKET*4*PLUS*)
+		set_tier high-end 500000 5000000 256
+		;;
+	*660P*|*QLC*|*BX500*|*A400*|*SN520*|*P1*NVME*|*BC501*)
+		set_tier budget 5000000 20000000 128
+		;;
+	esac
+fi
+
+# 3) PCIe generation fallback
+if [ -z "$TIER" ] && [ -n "$LINK_SPEED" ]; then
+	case "$LINK_SPEED" in
+	*"32 GT/s"*|*"32.0 GT/s"*|*"64 GT/s"*|*"64.0 GT/s"*)
+		set_tier gen5 200000 2000000 256
+		;;
+	*"16 GT/s"*|*"16.0 GT/s"*)
+		set_tier mid-range 2000000 10000000 256
+		;;
+	esac
+fi
+
+# 4) Final fallback: mid-range defaults
+if [ -z "$TIER" ]; then
+	set_tier mid-range 2000000 10000000 256
+fi
+
+# --- Apply settings ---
+
+echo "$READ_LAT"  > "$IOSCHED/read_lat_nsec"  2>/dev/null
+echo "$WRITE_LAT" > "$IOSCHED/write_lat_nsec"  2>/dev/null
+echo "$NR_REQ"    > "$SYSBLOCK/queue/nr_requests" 2>/dev/null
+
+# Disable WBT — it interferes with Kyber's own latency-based throttling
+if [ -f "$SYSBLOCK/queue/wbt_lat_usec" ]; then
+	echo 0 > "$SYSBLOCK/queue/wbt_lat_usec" 2>/dev/null
+fi
+
+$LOGGER "$DEV: tier=$TIER model='$MODEL' pcie='$LINK_SPEED x$LINK_WIDTH' read_lat=${READ_LAT}ns write_lat=${WRITE_LAT}ns nr_requests=$NR_REQ"
