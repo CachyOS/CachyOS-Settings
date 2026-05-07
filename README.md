@@ -31,7 +31,7 @@ Modprobe configurations control module loading and behavior for hardware-specifi
 ### ⏱️ Systemd: Service & System Management
 Systemd unit and configuration files for streamlined boot, resource management, and service control.
 * **Journal Log Limits**: Sets `journald` size limit to 50MB.
-* **Service Timeouts**: Defines `DefaultTimeoutStartSec` (15s) and `DefaultTimeoutStopSec` (10s) for services.
+* **Service Timeouts**: Defines `DefaultTimeoutStartSec` (15s) and `DefaultTimeoutStopSec` (10s) for system and user services.
 * **File Descriptor Limits**: Increases `DefaultLimitNOFILE` for both system (2048:2097152) and user (1024:1048576) services.
 * **Time Synchronization**: Configures `systemd-timesyncd` with Cloudflare and Google NTP servers.
 * **ZRAM Generator**: Configures ZRAM with `zstd` or `lz4` compression, `ram` size, and `swap-priority=100`.
