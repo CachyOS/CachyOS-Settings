@@ -25,7 +25,7 @@ Sysctl parameters modify kernel behavior at runtime for system-wide performance 
 Modprobe configurations control module loading and behavior for hardware-specific optimizations.
 * **AMD GPU Driver Enforcement**: Enables `amdgpu` SI/CIK support and disables the corresponding `radeon` support for GCN 1.0+ and 2.x GPUs.
 * **Watchdog Module Blacklist**: Prevents loading of Intel TCO and AMD SP5100 watchdog timers.
-* **NVIDIA Driver Optimizations**: Applies `NVreg_UsePageAttributeTable=1` (PAT for CPU performance), `NVreg_InitializeSystemMemoryAllocations=0` (disables memory clearing for GPU allocations), `NVreg_DynamicPowerManagement=0x02` (mobile GPU power saving), and `NVreg_EnableS0ixPowerManagement=1` (S0ix idle power saving on supported laptops).
+* **NVIDIA Driver Optimizations**: Applies `NVreg_InitializeSystemMemoryAllocations=0` (disables memory clearing for GPU allocations), `NVreg_DynamicPowerManagement=0x02` (mobile GPU power saving), and `NVreg_EnableS0ixPowerManagement=1` (S0ix idle power saving on supported laptops).
 
 ### ⏱️ Systemd: Service & System Management
 Systemd unit and configuration files for streamlined boot, resource management, and service control.
