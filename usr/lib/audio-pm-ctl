@@ -1,0 +1,67 @@
+#!/usr/bin/bash
+
+# Disables power saving capabilities for `snd-hda-intel` when device is connected to AC.
+# Prevents audio cracks on some hardware. The saved value is stashed in /run and restored
+# when the machine switches back to battery.
+#
+# Invoked from `20-audio-pm.rules` with one of: init, battery, ac.
+
+PARAM=/sys/module/snd_hda_intel/parameters/power_save
+STATE=/run/udev/snd-hda-intel-powersave
+
+# Stash the current `power_save` value to restore it later.
+save() {
+    local cur
+    cur=$(cat "$PARAM")
+    [[ $cur != 0 ]] && echo "$cur" > "$STATE"
+    return 0
+}
+
+# True if at least one mains supply is currently online.
+is_on_ac() {
+    local d type online
+    for d in /sys/class/power_supply/*; do
+        type=$(cat "$d/type" 2>/dev/null)
+        [[ $type == Mains ]] || continue
+        online=$(cat "$d/online" 2>/dev/null)
+        [[ $online == 1 ]] && return 0
+    done
+    return 1
+}
+
+# Sound card appeared: disable power saving when on AC.
+do_init() {
+    is_on_ac || return 0
+    save
+    echo 0 > "$PARAM"
+}
+
+# Switched to battery: restore the saved value (default 10).
+do_battery() {
+    local v
+    v=$(cat "$STATE" 2>/dev/null)
+    [[ -n $v ]] || v=10
+    echo "$v" > "$PARAM"
+}
+
+# Switched to AC: disable power saving.
+do_ac() {
+    save
+    echo 0 > "$PARAM"
+}
+
+usage() {
+    echo "usage: $0 {init|battery|ac}" >&2
+    exit 1
+}
+
+main() {
+    case "$1" in
+        init)    do_init ;;
+        battery) do_battery ;;
+        ac)      do_ac ;;
+        *)       usage ;;
+    esac
+}
+
+main "$@"
