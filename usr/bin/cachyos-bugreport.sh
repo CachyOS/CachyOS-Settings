@@ -67,32 +67,27 @@ bugreport() {
 
     cat << EOF >"$LOG_FILENAME"
 ____________________________________________
-
 Start of CachyOS bug report log file. Please send this report,
 along with a description of your bug, to CachyOS.
 
 Date: $(date)
 uname: $(uname -a)
 cmdline: $(cat /proc/cmdline)
-
 ____________________________________________
-Getting Hardware Information
+Getting hardware information
 
 $(inxi -Farz)
 ____________________________________________
-Getting Scheduler information
+Getting scheduler information
 
 sched-ext:
 $(grep -R "" /sys/kernel/sched_ext/ 2>/dev/null || echo "sched_ext not available")
 
 $(journalctl --output cat -k | grep -i scheduler || true)
-
 ____________________________________________
-
 dmesg
 
 $(dmesg)
-
 ____________________________________________
 journalctl of current boot
 
@@ -102,11 +97,10 @@ journalctl of previous boot
 
 $(journalctl -b -1 -p 4..1 2>/dev/null || echo "No previous boot log available")
 ____________________________________________
-
 Installed packages
 
 $(get_installed_packages)
---------------------------------------------
+____________________________________________
 EOF
 }
 
@@ -121,7 +115,9 @@ redact() {
     # Redact hostname (appears in uname, dmesg, journalctl)
     local hn
     hn=$(hostname)
-    sed_args+=(-e "s|\b$(sed_escape "$hn")\b|<hostname-redacted>|g")
+    if [[ $hn != "cachyos" ]]; then
+        sed_args+=(-e "s|\b$(sed_escape "$hn")\b|<hostname-redacted>|g")
+    fi
 
     # Redact real username and home directory (SUDO_USER is set when run via sudo)
     local real_user="${SUDO_USER:-}"
@@ -132,14 +128,31 @@ redact() {
         sed_args+=(-e "s|\b${escaped_user}\b|<username-redacted>|g")
     fi
 
+    # Redact SSIDs
+    local ssid_list
+    ssid_list="$(nmcli -t -f name,type c | sed -nE 's/(.*)\:.*wireless/\1/p')"
+
+    while IFS= read -r ssid; do
+        sed_args+=(-e "s|$(sed_escape "$ssid")|<ssid-redacted>|g")
+    done <<< "${ssid_list}"
+
     # Redact IPv4 addresses (inxi -z handles its own output; this covers dmesg/journal)
     sed_args+=(-e 's/\b\([0-9]\{1,3\}\.\)\{3\}[0-9]\{1,3\}\b/<ipv4-redacted>/g')
+
+    # Redact IPv6 addresses (standard unshortened format only)
+    sed_args+=(-e 's/\b\([0-9a-fA-F]\{4\}\:\)\{7\}[0-9a-fA-F]\{4\}\b/<ipv6-redacted>/g')
 
     # Redact MAC addresses (fallback for anything inxi -z may have missed)
     sed_args+=(-e 's/\b\([0-9a-fA-F]\{2\}:\)\{5\}[0-9a-fA-F]\{2\}\b/<mac-address-redacted>/g')
 
     # Redact email addresses
     sed_args+=(-e 's/[a-zA-Z0-9._%+-]\+@[a-zA-Z0-9.-]\+\.[a-zA-Z]\{2,\}/<email-address-redacted>/g')
+
+    # Redact UUIDs
+    sed_args+=(-e 's/[0-9a-fA-F]\{8\}-\([0-9a-fA-F]\{4\}-\)\{3\}[0-9a-fA-F]\{12\}/<uuid-redacted>/g')
+
+    # Redact some irrelevant files quoted and prefixed with file://, such as those output by xdg-desktop-portal-kde
+    sed_args+=(-e 's/\"file:\/\/.\+\"/\"file:\/\/<file-redacted>\"/g')
 
     # Single sed pass for all substitutions
     sed -i "${sed_args[@]}" "$LOG_FILENAME"
