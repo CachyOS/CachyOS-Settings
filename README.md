@@ -12,6 +12,7 @@ Udev rules automatically apply system configurations upon device detection or st
 * **I/O Scheduler Assignment**: Dynamically assigns I/O schedulers: `bfq` for HDDs, `mq-deadline` for SATA SSDs and eMMC, and `kyber` for NVMe SSDs.
 * **HDD Performance Tuning**: Applies `hdparm` settings (`-B 254 -S 0`) to rotational ATA disks.
 * **NVIDIA Runtime Power Management**: Enables/disables NVIDIA GPU runtime power management on driver bind/unbind events.
+* **USB HID Runtime Power Management**: Disables USB runtime PM (autosuspend) for external, removable HID input devices to reduce input latency.
 * **CPU DMA Latency Access**: Sets permissions for the `cpu_dma_latency` device.
 * **Wireless Regulatory Domain**: Triggers setting of the wireless regulatory domain when a Wi-Fi device is added.
 
