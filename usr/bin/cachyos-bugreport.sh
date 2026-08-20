@@ -62,6 +62,28 @@ get_installed_packages() {
     fi
 }
 
+get_xhci_debug() {
+    if ! grep -q '^xhci_hcd ' /proc/modules 2>/dev/null; then
+        echo "No xHCI controller found"
+        return 0
+    fi
+
+    echo "USB controllers (lspci -nn):"
+    lspci -nn | grep -i 'usb controller' || echo "lspci not available"
+
+    echo
+    echo "xHCI / USB lines from dmesg:"
+    dmesg | grep -iE 'xhci|xHC|new USB device' || true
+
+    echo
+    echo "xHCI debugfs (names and sizes only):"
+    if [ -d /sys/kernel/debug/usb/xhci ]; then
+        find /sys/kernel/debug/usb/xhci -maxdepth 2 -printf '%p %s bytes\n' 2>/dev/null || true
+    else
+        echo "debugfs not mounted (mount -t debugfs none /sys/kernel/debug)"
+    fi
+}
+
 bugreport() {
     echo "Starting with bugreport"
 
@@ -87,6 +109,10 @@ $(grep -R "" /sys/kernel/sched_ext/ 2>/dev/null || echo "sched_ext not available
 
 $(journalctl --output cat -k | grep -i scheduler || true)
 
+____________________________________________
+Getting xHCI debug information
+
+$(get_xhci_debug)
 ____________________________________________
 
 dmesg
