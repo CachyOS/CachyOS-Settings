@@ -1,4 +1,4 @@
 # Disable USB runtime PM (autosuspend) for external removable HID input devices
-ACTION=="add", SUBSYSTEM=="usb", ATTR{bInterfaceClass}=="03", \
-    ATTRS{removable}=="removable", TEST=="../power/control", \
-    ATTR{../power/control}="on"
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", \
+    ATTR{bInterfaceClass}=="03", ATTRS{removable}=="removable", \
+    TEST=="../power/control", ATTR{../power/control}="on"
