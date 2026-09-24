@@ -55,19 +55,30 @@ then
 	exit 1
 fi
 
+# Zones with no single associated country
+case "$ZONE" in
+	UTC|UCT|Universal|Zulu|GMT|GMT[+-]0|GMT0|Greenwich|Factory|posixrules|\
+	CET|EET|WET|MET|EST|MST|HST|EST5EDT|CST6CDT|MST7MDT|PST8PDT|\
+	Etc/*)
+		$LOGGER "Timezone is $ZONE, with no associated country. Not setting wireless regulatory domain."
+		exit 0
+		;;
+esac
+
+# Resolve backward-compat aliases (e.g. Asia/Calcutta) to their canonical name
+TZDATA_ZI=/usr/share/zoneinfo/tzdata.zi
+if [ -f "$TZDATA_ZI" ]
+then
+	CANON=$(awk -v z="$ZONE" '$1=="L" && $3==z {print $2; exit}' "$TZDATA_ZI")
+	[ -n "$CANON" ] && ZONE=$CANON
+fi
+
 COUNTRY=$(getcountry)
 
 if [ -z "$COUNTRY" ]
 then
-	case "$ZONE" in
-        UTC|UCT|Universal|Zulu|GMT|Etc/UTC|Etc/UCT|Etc/Universal|Etc/Zulu|Etc/GMT)
-            $LOGGER "Timezone is $ZONE, with no associated country. Not setting wireless regulatory domain."
-            exit 0
-            ;;
-    esac
-
-    $LOGGER -s "Could not determine country for $ZONE. Unable to set wireless regulatory domain."
-    exit 1
+	$LOGGER -s "Could not determine country for $ZONE. Unable to set wireless regulatory domain."
+	exit 1
 fi
 
 $LOGGER "Setting regulatory domain to $COUNTRY based on timezone ($ZONE)."
