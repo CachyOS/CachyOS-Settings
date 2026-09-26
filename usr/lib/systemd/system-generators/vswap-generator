@@ -15,8 +15,8 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-# Overwrite zram-generator configuration when xswap is available
-if [[ -e /sys/kernel/mm/xswap && ! -n "$(compgen -G '/sys/kernel/mm/xswap/type*')" ]]; then
+# Overwrite zram-generator configuration when vswap is available
+value="$(grep -P -o '(?(?=.*\s)\s+|^)(vswap=\K(on|off))(?!u(?(?=\s+).*|$))' /proc/cmdline)"
+if (zgrep -q '^CONFIG_VSWAP_DEFAULT_ON=y$' /proc/config.gz && [[ "$value" != "off" ]]) || [[ "$value" == "on" ]]; then
     ln -s /dev/null /run/systemd/zram-generator.conf
-    echo 100 > /sys/kernel/mm/xswap/create
 fi
