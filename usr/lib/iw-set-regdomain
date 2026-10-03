@@ -65,15 +65,22 @@ case "$ZONE" in
 		;;
 esac
 
-# Resolve backward-compat aliases (e.g. Asia/Calcutta) to their canonical name
+COUNTRY=$(getcountry)
+
+# Not in zone.tab: resolve backward-compat aliases (e.g. US/Pacific,
+# Asia/Calcutta) to their canonical name and retry. This must not run before
+# the direct lookup, as many zone.tab entries are themselves links into
+# another country's zone (e.g. Europe/Amsterdam -> Europe/Brussels).
 TZDATA_ZI=/usr/share/zoneinfo/tzdata.zi
-if [ -f "$TZDATA_ZI" ]
+if [ -z "$COUNTRY" ] && [ -f "$TZDATA_ZI" ]
 then
 	CANON=$(awk -v z="$ZONE" '$1=="L" && $3==z {print $2; exit}' "$TZDATA_ZI")
-	[ -n "$CANON" ] && ZONE=$CANON
+	if [ -n "$CANON" ]
+	then
+		ZONE=$CANON
+		COUNTRY=$(getcountry)
+	fi
 fi
-
-COUNTRY=$(getcountry)
 
 if [ -z "$COUNTRY" ]
 then
