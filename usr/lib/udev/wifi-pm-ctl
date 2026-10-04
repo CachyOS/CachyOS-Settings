@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Disables power saving capabilities for Wi-Fi when device is connected to AC.
+# Reduces network latency spikes.
+
+is_on_ac() {
+    local battery online
+    while IFS= read -r battery; do
+        online="$(cat "${battery/type/online}" 2>/dev/null)"
+        [[ "$online" == 1 ]] || return 1
+    done < <(grep -l "Mains" /sys/class/power_supply/*/type 2>/dev/null)
+    return 0
+}
+
+toggle_power_saving() {
+    local card
+    local action="$1"
+
+    for card in /sys/class/net/*/wireless; do
+        card="${card%/wireless}"
+        card="${card##*/}"
+        if [ -n "$card" ]; then
+            iw dev "$card" set power_save "$action" 2>/dev/null
+        fi
+    done
+
+    return 0
+}
+
+init() {
+    if is_on_ac; then
+        toggle_power_saving off
+    else
+        toggle_power_saving on
+    fi
+}
+
+usage() {
+    echo "Usage: $0 {init|enable|disable}" >&2
+    exit 1
+}
+
+main() {
+    case "$1" in
+        init)    init ;;
+        enable)  toggle_power_saving on ;;
+        disable) toggle_power_saving off ;;
+        *)       usage ;;
+    esac
+}
+
+main "$@"
