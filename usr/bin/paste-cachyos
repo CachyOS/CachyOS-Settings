@@ -5,7 +5,14 @@ URL="https://paste.cachyos.org"
 
 FILEPATH="$1"
 FILENAME="$(basename -- "$FILEPATH")"
-EXTENSION="${FILENAME##*.}"
+
+# Only treat the suffix as an extension if there actually is one, otherwise
+# "${FILENAME##*.}" expands to the whole name (e.g. "bugreport" -> ".bugreport").
+# Requiring a character before the dot keeps dotfiles (".bashrc") extensionless.
+EXTENSION=""
+case "$FILENAME" in
+    ?*.*) EXTENSION="${FILENAME##*.}" ;;
+esac
 
 RESPONSE="$(curl --data-binary @"${FILEPATH:-/dev/stdin}" --url $URL)"
 PASTELINK="${URL}${RESPONSE}"
