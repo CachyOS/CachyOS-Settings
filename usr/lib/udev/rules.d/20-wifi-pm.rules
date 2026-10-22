@@ -1,0 +1,14 @@
+# Disables power saving capabilities for Wi-Fi when device is connected to AC.
+# Reduces network latency spikes.
+ACTION=="add", SUBSYSTEM=="net", ENV{DEVTYPE}=="wlan", \
+    RUN+="/usr/lib/udev/wifi-pm-ctl init"
+
+ACTION=="add|change", SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", \
+    ENV{POWER_SUPPLY_ONLINE}=="0", \
+    TEST=="/sys/module/mac80211", \
+    RUN+="/usr/lib/udev/wifi-pm-ctl enable"
+
+ACTION=="add|change", SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_TYPE}=="Mains", \
+    ENV{POWER_SUPPLY_ONLINE}=="1", \
+    TEST=="/sys/module/mac80211", \
+    RUN+="/usr/lib/udev/wifi-pm-ctl disable"
