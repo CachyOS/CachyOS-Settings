@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+
+# eac-status checks if the system is set up for Easy Anti-Cheat Linux v2.
+# Run it in the linux-cachyos-eac boot entry to also check the running kernel.
+
+EAC_CA_NAME="${EAC_CA_NAME:-CachyOS EAC CA}"
+
+die() {
+    echo "Error: $*"
+    exit 1
+}
+
+if [ "$(id -u)" -ne 0 ]; then
+    die "This script must be run with root privileges."
+fi
+
+for cmd in sbctl sbverify tpm2_eventlog; do
+    if ! command -v "$cmd" >/dev/null; then
+        die "$cmd is missing, install sbctl, sbsigntools and tpm2-tools."
+    fi
+done
+
+failed=0
+
+ok() {
+    echo "[ OK ] $*"
+}
+
+fail() {
+    echo "[FAIL] $*"
+    failed=1
+}
+
+# Common name of a DER certificate
+cn() {
+    openssl x509 -inform DER -noout -subject -nameopt multiline 2>/dev/null \
+        | sed -n 's/^ *commonName *= //p'
+}
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+check_secure_boot() {
+    if sbctl status | grep -q 'Secure Boot:.*Enabled'; then
+        ok "Secure Boot is enabled"
+    else
+        fail "Secure Boot is disabled"
+    fi
+
+    if sbctl status | grep -q 'Setup Mode:.*Disabled'; then
+        ok "Setup Mode is disabled"
+    else
+        fail "Firmware is in Setup Mode"
+    fi
+}
+
+check_tpm() {
+    if [ "$(cat /sys/class/tpm/tpm0/tpm_version_major 2>/dev/null)" = 2 ]; then
+        ok "TPM 2.0 found"
+    else
+        fail "No TPM 2.0 found"
+    fi
+}
+
+# Find the EAC certificate in db
+check_db() {
+    local der
+
+    sbctl --disable-landlock --quiet export-enrolled-keys --dir "$tmp/keys" >/dev/null
+    for der in "$tmp"/keys/DB/*.der; do
+        if [ "$(cn < "$der")" = "$EAC_CA_NAME" ]; then
+            openssl x509 -inform DER -in "$der" -out "$tmp/eac.pem"
+            break
+        fi
+    done
+
+    if [ -f "$tmp/eac.pem" ]; then
+        ok "$EAC_CA_NAME is enrolled"
+    else
+        fail "$EAC_CA_NAME is not enrolled, see the wiki on how to enroll it"
+    fi
+}
+
+# The boot files must only be signed by CachyOS. sbctl may sign them again with
+# your own key, for example through its mkinitcpio hook.
+check_boot_files() {
+    local esp file sigs
+
+    esp=$(bootctl --print-esp-path 2>/dev/null || echo /boot)
+    for file in /boot/vmlinuz-linux-cachyos-eac \
+                "$esp/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz" \
+                "$esp/EFI/systemd/systemd-bootx64.efi" \
+                "$esp/EFI/cachyos-eac/systemd-bootx64.efi"; do
+        [ -f "$file" ] || continue
+        sigs=$(sbverify --list "$file" 2>/dev/null | grep -c '^signature')
+        if [ -f "$tmp/eac.pem" ] && sbverify --cert "$tmp/eac.pem" "$file" >/dev/null 2>&1; then
+            if [ "$sigs" -eq 1 ]; then
+                ok "$file is signed by CachyOS"
+            else
+                fail "$file has $sigs signatures"
+            fi
+        else
+            fail "$file is not signed by CachyOS"
+        fi
+    done
+}
+
+check_cmdline() {
+    local opt last
+
+    for opt in lockdown=integrity lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0 \
+               intel_iommu=on module.sig_enforce=1 sysctl.kernel.kexec_load_disabled=1; do
+        # The kernel uses the last one if an option is given more than once
+        last=$(tr ' ' '\n' < /proc/cmdline | grep "^${opt%%=*}=" | tail -n1)
+        if [ "$last" = "$opt" ]; then
+            ok "$opt"
+        else
+            fail "$opt is missing from the kernel command line"
+        fi
+    done
+}
+
+check_kernel() {
+    if grep -q '\[integrity\]' /sys/kernel/security/lockdown; then
+        ok "Lockdown is in integrity mode"
+    else
+        fail "Lockdown is not in integrity mode"
+    fi
+
+    if grep -q 'bpf' /sys/kernel/security/lsm; then
+        ok "BPF LSM is active"
+    else
+        fail "BPF LSM is not active"
+    fi
+
+    if [ "$(cat /sys/module/module/parameters/sig_enforce)" = Y ]; then
+        ok "Module signatures are enforced"
+    else
+        fail "Module signatures are not enforced"
+    fi
+
+    if [ "$(cat /proc/sys/kernel/kexec_load_disabled)" = 1 ]; then
+        ok "kexec is disabled"
+    else
+        fail "kexec is not disabled"
+    fi
+}
+
+check_iommu() {
+    if ! ls /sys/kernel/iommu_groups/*/type >/dev/null 2>&1; then
+        fail "IOMMU is disabled"
+    elif grep -qx identity /sys/kernel/iommu_groups/*/type; then
+        fail "IOMMU is in passthrough mode"
+    else
+        ok "IOMMU is enabled"
+    fi
+}
+
+# Certificates the firmware used to verify the boot files, recorded in PCR 7
+check_pcr7() {
+    local data name
+
+    tpm2_eventlog /sys/kernel/security/tpm0/binary_bios_measurements 2>/dev/null \
+        | awk '/EV_EFI_VARIABLE_AUTHORITY/ {f=1} f && /VariableData:/ {print $2; f=0}' \
+        | tr -d '"' \
+        | while read -r data; do
+            # Skip the 16 byte owner GUID in front of the certificate
+            echo "${data:32}" | tr a-f A-F | basenc --base16 -d 2>/dev/null | cn
+        done > "$tmp/authorities"
+
+    if grep -qx "$EAC_CA_NAME" "$tmp/authorities"; then
+        ok "Boot was verified by $EAC_CA_NAME"
+    else
+        fail "Boot was not verified by $EAC_CA_NAME"
+    fi
+
+    grep -v -e "^$EAC_CA_NAME$" -e '^Microsoft' "$tmp/authorities" | while read -r name; do
+        echo "[WARN] Boot was also verified by $name"
+    done
+}
+
+check_secure_boot
+check_tpm
+check_db
+check_boot_files
+
+if [[ "$(uname -r)" != *-cachyos-eac ]]; then
+    echo "Not running linux-cachyos-eac, boot the EAC entry to check the running kernel."
+    exit "$failed"
+fi
+
+check_cmdline
+check_kernel
+check_iommu
+check_pcr7
+
+exit "$failed"

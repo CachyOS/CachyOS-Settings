@@ -62,6 +62,7 @@ Bash and Lua scripts for system diagnostics, optimization, and administration.
 * **`cachyos-bugreport.sh`**: Generates a comprehensive system bug report including hardware, logs, and installed packages, with an option to upload. (Requires root)
 * **`dlss-swapper`**: Forces latest NVIDIA DLSS presets (SR, RR, FG) and updates DLLs via NGX.
 * **`dlss-swapper-dll`**: Forces latest NVIDIA DLSS presets (SR, RR, FG) but skips NGX updater.
+* **`eac-status`**: Checks if the system is set up for Easy Anti-Cheat Linux v2: Secure Boot, TPM, the CachyOS-signed boot files and, in the EAC boot entry, the kernel settings. (Requires root)
 * **`game-performance`**: Sets CPU power profile to "performance" via `powerprofilesctl` when launching applications, with screensaver inhibition by default. Set `GAME_PERFORMANCE_SCREENSAVER_ON=1` to skip inhibition.
 * **`kerver`**: Displays kernel version, x86_64 support, CPU config, and disk scheduler information.
 * **`paste-cachyos`**: Uploads file content or stdin to `https://paste.cachyos.org`.
