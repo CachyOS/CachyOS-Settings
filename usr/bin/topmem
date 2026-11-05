@@ -203,9 +203,11 @@ local function main()
         elseif arg[i] == "--help" or arg[i] == "-h" then
             print_help()
         else
-            local status, value = pcall(tonumber, arg[i])
-            if not status then
-                die("The argument must be a number")
+            -- tonumber() reports failure by returning nil, it does not raise,
+            -- so pcall() always succeeded here and bad input was ignored
+            local value = tonumber(arg[i])
+            if not value or value < 1 then
+                die("The argument must be a positive number")
             else
                 size = value
             end
