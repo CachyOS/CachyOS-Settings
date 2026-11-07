@@ -1,0 +1,25 @@
+# Cap the dirty page cache of slow disks: USB and removable disks, HDDs and
+# SD/eMMC (mmcblk).
+#
+# vm.dirty_ratio is sized for fast internal drives. Without a per-device cap a
+# slow disk can buffer gigabytes of dirty data, so a copy "finishes" instantly
+# and sync/umount/suspend then stall for a long time. strict_limit enforces
+# max_bytes for this device even while the global dirty limit has not been
+# reached. max_bytes is converted to a fraction of the global dirty limit when
+# written.
+
+# USB disks
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_BUS}=="usb", \
+    ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
+
+# Removable disks
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ATTR{removable}=="1", \
+    ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
+
+# HDDs
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", KERNEL=="sd[a-z]*", \
+    ATTR{queue/rotational}=="1", ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
+
+# SD cards and eMMC
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", KERNEL=="mmcblk[0-9]*", \
+    ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
