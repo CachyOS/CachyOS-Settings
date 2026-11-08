@@ -15,6 +15,10 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# Files signed by CachyOS for Easy Anti-Cheat (the EAC kernel and systemd-boot)
+# must keep the CachyOS signature as their only signature
+EAC_CA=/usr/share/cachyos-eac/cachyos-eac-ca.crt
+
 export ESP_PATH=/boot
 sbctl verify 2>/dev/null | awk '/✗/ {print $2}' | while IFS= read -r entry; do
     # We expect users who use this script to enroll their
@@ -23,6 +27,10 @@ sbctl verify 2>/dev/null | awk '/✗/ {print $2}' | while IFS= read -r entry; do
     # files with our own keys.
     if [[ "$entry" =~ ^.*/EFI/(Microsoft|Windows) || "$entry" == *.mui || "$entry" == *.dll
         || "$entry" =~ ^/boot/grub ]]; then
+        continue
+    fi
+    if [ -f "$EAC_CA" ] && sbverify --cert "$EAC_CA" "$entry" >/dev/null 2>&1; then
+        echo "Skipping $entry, it is signed by CachyOS for Easy Anti-Cheat"
         continue
     fi
     sbctl sign -s "$entry"
