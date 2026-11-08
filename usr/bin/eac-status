@@ -153,14 +153,48 @@ check_kernel() {
     fi
 }
 
+# The kernel lets AMD GPUs with PASID support bypass the IOMMU (identity domain)
+# even with iommu.passthrough=0, so they only get a warning. Any other device
+# that bypasses it fails the check.
 check_iommu() {
+    local group dev gpu devs
+    local -a gpus=() others=()
+
     if ! ls /sys/kernel/iommu_groups/*/type >/dev/null 2>&1; then
         fail "IOMMU is disabled"
-    elif grep -qx identity /sys/kernel/iommu_groups/*/type; then
+        return
+    elif ! grep -qx -e DMA -e DMA-FQ /sys/kernel/iommu_groups/*/type; then
         fail "IOMMU is in passthrough mode"
-    else
+        return
+    fi
+
+    for group in /sys/kernel/iommu_groups/*; do
+        [ "$(cat "$group/type")" = identity ] || continue
+
+        gpu='' devs=''
+        for dev in "$group"/devices/*; do
+            if [ "$(cat "$dev/vendor" 2>/dev/null)" = 0x1002 ] \
+               && [[ "$(cat "$dev/class" 2>/dev/null)" == 0x03* ]]; then
+                gpu=${dev##*/}
+            fi
+            devs+=" ${dev##*/}"
+        done
+        if [ -n "$gpu" ]; then
+            gpus+=("$gpu")
+        else
+            others+=("${devs# }")
+        fi
+    done
+
+    for devs in "${others[@]}"; do
+        fail "IOMMU is bypassed by $devs"
+    done
+    if [ "${#others[@]}" -eq 0 ]; then
         ok "IOMMU is enabled"
     fi
+    for gpu in "${gpus[@]}"; do
+        warn "IOMMU is bypassed by the AMD GPU $gpu (kernel default for AMD GPUs)"
+    done
 }
 
 # Certificates the firmware used to verify the boot files, recorded in PCR 7
@@ -198,7 +232,7 @@ summary() {
     elif [ "$1" = boot-files ]; then
         echo "The boot files are ready. Boot the EAC entry to check the running kernel."
     elif [ "$warned" -gt 0 ]; then
-        echo "No check failed, but the boot was also verified by other certificates. Easy Anti-Cheat may not accept it."
+        echo "No check failed, but Easy Anti-Cheat may not accept the warnings above."
     else
         echo "All checks passed. This boot meets the requirements of Easy Anti-Cheat Linux v2."
     fi
