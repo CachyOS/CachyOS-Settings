@@ -4,6 +4,7 @@
 # Run it in the linux-cachyos-eac boot entry to also check the running kernel.
 
 EAC_CA_NAME="${EAC_CA_NAME:-CachyOS EAC CA}"
+WIKI_URL=https://wiki.cachyos.org/configuration/easy_anti_cheat/#troubleshooting
 
 die() {
     echo "Error: $*"
@@ -21,6 +22,7 @@ for cmd in sbctl sbverify tpm2_eventlog; do
 done
 
 failed=0
+warned=0
 
 ok() {
     echo "[ OK ] $*"
@@ -28,7 +30,12 @@ ok() {
 
 fail() {
     echo "[FAIL] $*"
-    failed=1
+    failed=$((failed + 1))
+}
+
+warn() {
+    echo "[WARN] $*"
+    warned=$((warned + 1))
 }
 
 # Common name of a DER certificate
@@ -174,9 +181,28 @@ check_pcr7() {
         fail "Boot was not verified by $EAC_CA_NAME"
     fi
 
-    grep -v -e "^$EAC_CA_NAME$" -e '^Microsoft' "$tmp/authorities" | while read -r name; do
-        echo "[WARN] Boot was also verified by $name"
-    done
+    # Not in a pipe, warn has to count in this shell
+    while read -r name; do
+        warn "Boot was also verified by $name"
+    done < <(grep -v -e "^$EAC_CA_NAME$" -e '^Microsoft' "$tmp/authorities")
+}
+
+# Print the result and exit with 1 if a check failed. The checks only cover this
+# system, whether a game starts is still up to Easy Anti-Cheat.
+summary() {
+    echo
+    if [ "$failed" -eq 1 ]; then
+        echo "1 check failed, see $WIKI_URL"
+    elif [ "$failed" -gt 1 ]; then
+        echo "$failed checks failed, see $WIKI_URL"
+    elif [ "$1" = boot-files ]; then
+        echo "The boot files are ready. Boot the EAC entry to check the running kernel."
+    elif [ "$warned" -gt 0 ]; then
+        echo "No check failed, but the boot was also verified by other certificates. Easy Anti-Cheat may not accept it."
+    else
+        echo "All checks passed. This boot meets the requirements of Easy Anti-Cheat Linux v2."
+    fi
+    exit $((failed > 0))
 }
 
 check_secure_boot
@@ -185,8 +211,7 @@ check_db
 check_boot_files
 
 if [[ "$(uname -r)" != *-cachyos-eac ]]; then
-    echo "Not running linux-cachyos-eac, boot the EAC entry to check the running kernel."
-    exit "$failed"
+    summary boot-files
 fi
 
 check_cmdline
@@ -194,4 +219,4 @@ check_kernel
 check_iommu
 check_pcr7
 
-exit "$failed"
+summary
