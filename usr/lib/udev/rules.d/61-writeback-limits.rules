@@ -8,10 +8,6 @@
 # reached. max_bytes is converted to a fraction of the global dirty limit when
 # written.
 
-# USB disks
-ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_BUS}=="usb", \
-    ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
-
 # Removable disks
 ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ATTR{removable}=="1", \
     ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
@@ -23,3 +19,8 @@ ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", KERNEL=="sd[a-z]
 # SD cards and eMMC
 ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", KERNEL=="mmcblk[0-9]*", \
     ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="268435456"
+
+# USB disks get a smaller cap so ejecting finishes quickly. Keep this rule last:
+# USB disks often also match the removable or HDD rules above.
+ACTION=="add|change", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_BUS}=="usb", \
+    ATTR{bdi/strict_limit}="1", ATTR{bdi/max_bytes}="16777216"
