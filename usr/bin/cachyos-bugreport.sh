@@ -131,7 +131,7 @@ redact() {
     # Redact SSIDs
     local ssid_list
 
-    if commnad -v nmcli &>/dev/null; then
+    if command -v nmcli &>/dev/null; then
         ssid_list="$(nmcli -t -f name,type c | sed -nE 's/(.*)\:.*wireless/\1/p')"
 
         if [ -n "$ssid_list" ]; then
