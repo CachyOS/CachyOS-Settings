@@ -1,0 +1,569 @@
+#!/usr/bin/env bash
+
+# eac-setup sets up the system for Easy Anti-Cheat Linux v2, following
+# https://wiki.cachyos.org/configuration/easy_anti_cheat/
+#
+# Every step checks what is already done, so the script can be run again at any
+# time, for example after the firmware was put into Setup Mode or to repair the
+# setup.
+#
+# Usage: eac-setup [-y]    set up the system
+#        eac-setup boot    reboot into the EAC boot entry
+
+set -euo pipefail
+
+EAC_CA=/usr/share/cachyos-eac/cachyos-eac-ca.crt
+EAC_CA_NAME="CachyOS EAC CA"
+EAC_REQ="lockdown=integrity lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0 intel_iommu=on module.sig_enforce=1 sysctl.kernel.kexec_load_disabled=1"
+EAC_LABEL="CachyOS EAC"
+SDBOOT_SIGNED=/usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed
+SDBOOT_UNSIGNED=/usr/lib/systemd/boot/efi/systemd-bootx64.efi
+SBCTL_DB_KEY=/var/lib/sbctl/keys/db/db.key
+SBCTL_DB_CERT=/var/lib/sbctl/keys/db/db.pem
+EFI_GLOBAL=8be4df61-93ca-11d2-aa0d-00e098032b8c
+WIKI_URL=https://wiki.cachyos.org/configuration/easy_anti_cheat/
+
+yes=0
+
+step() {
+    echo
+    echo "==> $*"
+}
+
+msg() {
+    echo "    $*"
+}
+
+die() {
+    echo "Error: $*" >&2
+    exit 1
+}
+
+confirm() {
+    local answer
+
+    if [ "$yes" -eq 1 ]; then
+        return 0
+    fi
+    read -r -p "    $* [y/N] " answer
+    [[ "$answer" == [yY]* ]]
+}
+
+# The firmware entry of the CachyOS-signed systemd-boot (Limine and rEFInd).
+# It has to point to the copy on this EFI system partition.
+eac_bootnum() {
+    local partuuid
+
+    partuuid=$(lsblk -no PARTUUID "$(findmnt -no SOURCE "$ESP")")
+    efibootmgr | grep -iF "$partuuid" | grep -iF '\EFI\cachyos-eac\systemd-bootx64.efi' \
+        | sed -n "s/^Boot\([0-9A-F]\{4\}\)\*\? $EAC_LABEL\t.*/\1/p" | head -n1 || true
+}
+
+# "eac-setup boot": reboot into the EAC entry once
+boot_eac() {
+    local num
+
+    [ -f "$ESP/loader/entries/cachyos-eac.conf" ] || die "There is no EAC boot entry, run eac-setup first."
+
+    if [ -d "$ESP/EFI/cachyos-eac" ]; then
+        # Limine and rEFInd: start the separate systemd-boot on the next boot
+        num=$(eac_bootnum)
+        if [ -z "$num" ]; then
+            die "The '$EAC_LABEL' firmware boot entry is missing, run eac-setup to create it again."
+        fi
+        efibootmgr --quiet --bootnext "$num"
+        systemctl reboot
+    else
+        systemctl reboot --boot-loader-entry=cachyos-eac.conf
+    fi
+}
+
+secure_boot_state() {
+    local byte
+
+    # Skip the 4 byte attributes
+    byte=$(tail -c +5 "/sys/firmware/efi/efivars/$1-$EFI_GLOBAL" 2>/dev/null | od -An -tu1 | tr -d ' ')
+    [ "$byte" = 1 ]
+}
+
+boot_manager_of() {
+    case "${1,,}" in
+        *cachyos-eac*) ;;
+        *limine*) echo limine ;;
+        *refind*) echo refind ;;
+        *systemd*) echo systemd-boot ;;
+    esac
+}
+
+# The boot manager that started this system, or else the first one in
+# BootOrder. In the EAC boot of Limine and rEFInd, the running one is the
+# separate systemd-boot, which does not count.
+detect_boot_manager() {
+    local num found
+    local -a installed=()
+
+    for num in $(efibootmgr | sed -n 's/^BootCurrent: \([0-9A-F]\{4\}\)$/\1/p; s/^BootOrder: \([0-9A-F]\{4\}\).*/\1/p'); do
+        found=$(boot_manager_of "$(efibootmgr | grep "^Boot$num" || true)")
+        if [ -n "$found" ]; then
+            echo "$found"
+            return
+        fi
+    done
+
+    # Neither tells it, for example with Windows first in BootOrder
+    if [ -f /etc/default/limine ] && [ -f "$ESP/limine.conf" ]; then
+        installed+=(limine)
+    fi
+    if [ -f "$ESP/EFI/refind/refind_x64.efi" ]; then
+        installed+=(refind)
+    fi
+    if [ -f "$ESP/EFI/systemd/systemd-bootx64.efi" ]; then
+        installed+=(systemd-boot)
+    fi
+    if [ "${#installed[@]}" -gt 1 ]; then
+        die "Found more than one boot manager (${installed[*]}). Run eac-setup with EAC_BOOT_MANAGER set to the one you use."
+    fi
+    echo "${installed[*]}"
+}
+
+check_requirements() {
+    step "Checking the requirements"
+
+    [ -d /sys/firmware/efi ] || die "The system was not booted in UEFI mode."
+    if [ "$(cat /sys/class/tpm/tpm0/tpm_version_major 2>/dev/null)" != 2 ]; then
+        die "No TPM 2.0 found, enable it in the firmware settings (AMD fTPM, Intel PTT)."
+    fi
+    # The normal kernel leaves the Intel IOMMU off, so look for the firmware's
+    # ACPI table (DMAR on Intel, IVRS on AMD)
+    if [ ! -e /sys/firmware/acpi/tables/DMAR ] && [ ! -e /sys/firmware/acpi/tables/IVRS ]; then
+        die "The IOMMU is disabled, enable it in the firmware settings (AMD-Vi / IOMMU, VT-d)."
+    fi
+    if grep -q '\.snapshots' /proc/cmdline; then
+        die "The system was booted from a snapshot, boot your normal system first."
+    fi
+}
+
+# The tools and the CA certificate. The CachyOS-signed boot files are only
+# installed once the firmware trusts the CA.
+install_tools() {
+    local -a args=(--needed)
+
+    step "Installing the tools"
+
+    if [ "$yes" -eq 1 ]; then
+        args+=(--noconfirm)
+    fi
+    pacman -S "${args[@]}" sbctl sbsigntools tpm2-tools efibootmgr cachyos-eac-signing-key
+}
+
+find_boot_manager() {
+    step "Looking for the boot manager"
+
+    BOOT_MANAGER=${EAC_BOOT_MANAGER:-$(detect_boot_manager)}
+    case "$BOOT_MANAGER" in
+        systemd-boot | refind)
+            # systemd-boot only reads kernels from the EFI system partition
+            if [ "$ESP" != /boot ]; then
+                die "The EFI system partition is mounted at $ESP, only /boot is supported with $BOOT_MANAGER."
+            fi
+            ;;
+        limine)
+            # shellcheck disable=SC1091
+            if [ "$(set +eu; . /etc/default/limine >/dev/null 2>&1; echo "${ENABLE_UKI:-}")" = yes ]; then
+                die "ENABLE_UKI=yes is set in /etc/default/limine, which EAC does not accept."
+            fi
+            ;;
+        *)
+            die "No supported boot manager found (systemd-boot, Limine or rEFInd)."
+            ;;
+    esac
+    case "$BOOT_MANAGER" in
+        limine) BOOT_MANAGER_NAME=Limine ;;
+        refind) BOOT_MANAGER_NAME=rEFInd ;;
+        *) BOOT_MANAGER_NAME=systemd-boot ;;
+    esac
+    msg "Boot manager: $BOOT_MANAGER_NAME, EFI system partition: $ESP"
+}
+
+install_packages() {
+    local installed
+    local -a pkgs=(linux-cachyos-eac systemd-boot-cachyos-signed)
+    local -a args=(--needed)
+
+    step "Installing the EAC kernel and the CachyOS-signed systemd-boot"
+
+    installed=$(pacman -Qq)
+    if grep -q 'nvidia-580xx' <<< "$installed"; then
+        pkgs+=(linux-cachyos-eac-nvidia-580xx)
+    elif grep -q 'nvidia-open' <<< "$installed"; then
+        pkgs+=(linux-cachyos-eac-nvidia-open)
+    fi
+    if grep -qx 'zfs-utils' <<< "$installed"; then
+        pkgs+=(linux-cachyos-eac-zfs)
+    fi
+    if grep -qx 'r8125-dkms' <<< "$installed"; then
+        pkgs+=(linux-cachyos-eac-r8125)
+    fi
+
+    # The self-signed systemd-boot from the Secure Boot guide conflicts with
+    # systemd-boot-cachyos-signed
+    if [ -f "$SDBOOT_SIGNED" ] && ! pacman -Qqo "$SDBOOT_SIGNED" >/dev/null 2>&1; then
+        msg "Removing the self-signed $SDBOOT_SIGNED"
+        rm -f "$SDBOOT_SIGNED"
+    fi
+
+    if [ "$yes" -eq 1 ]; then
+        args+=(--noconfirm)
+    fi
+    pacman -S "${args[@]}" "${pkgs[@]}"
+}
+
+# Is this certificate (PEM) in the Secure Boot database? Compares the whole
+# certificate, not only its name.
+enrolled_in_db() {
+    local der tmp found=1
+
+    tmp=$(mktemp -d)
+    # sbctl wants to create the directory itself. Without a readable database
+    # outside of Setup Mode, stop instead of enrolling the CA a second time.
+    if ! sbctl --disable-landlock --quiet export-enrolled-keys --dir "$tmp/keys" >/dev/null 2>&1 \
+       && ! secure_boot_state SetupMode; then
+        rm -rf "$tmp"
+        die "Could not read the enrolled Secure Boot keys."
+    fi
+    if openssl x509 -in "$1" -outform DER -out "$tmp/cert.der" 2>/dev/null; then
+        for der in "$tmp"/keys/DB/*.der; do
+            if cmp -s "$der" "$tmp/cert.der"; then
+                found=0
+            fi
+        done
+    fi
+    rm -rf "$tmp"
+    return "$found"
+}
+
+enroll_keys() {
+    local vendor
+    local -a flags=(--microsoft --custom)
+
+    step "Enrolling the Secure Boot keys"
+
+    if ! secure_boot_state SetupMode && enrolled_in_db "$EAC_CA"; then
+        # The boot manager and the normal kernels are signed with sbctl's key
+        if [ ! -f "$SBCTL_DB_KEY" ] || ! enrolled_in_db "$SBCTL_DB_CERT"; then
+            msg "$EAC_CA_NAME is enrolled, but the firmware does not trust sbctl's own key, which"
+            msg "signs your boot manager and normal kernels. Put the firmware into Setup Mode"
+            msg "and run eac-setup again:"
+            msg "  systemctl reboot --firmware-setup"
+            exit 1
+        fi
+        msg "$EAC_CA_NAME is already enrolled"
+        return
+    fi
+
+    if secure_boot_state SetupMode; then
+        vendor=$(cat /sys/class/dmi/id/board_vendor 2>/dev/null || true)
+        # ASUS and Gigabyte boards can end up with duplicate keys and a
+        # Secure Boot Violation when their built-in keys are enrolled
+        if [ -e "/sys/firmware/efi/efivars/dbDefault-$EFI_GLOBAL" ] \
+           && [[ ! "${vendor,,}" =~ asus|gigabyte ]]; then
+            flags+=(--firmware-builtin)
+        fi
+
+        msg "The firmware is in Setup Mode. This enrolls your own keys, Microsoft's keys and the"
+        msg "$EAC_CA_NAME. BitLocker can ask for its recovery key afterwards, and a LUKS disk"
+        msg "bound to the TPM asks for its passphrase. Make sure you have them."
+        if [[ "${vendor,,}" == *micro-star* ]]; then
+            msg "MSI boards: set 'Image Execution Policy' to 'Deny Execute' for all device types in"
+            msg "the Secure Boot settings, otherwise the firmware does not verify the boot files."
+        fi
+        confirm "Enroll the keys now?" || die "Aborted."
+
+        sbctl create-keys
+        sbctl enroll-keys "${flags[@]}"
+    elif [ -f /var/lib/sbctl/keys/KEK/KEK.key ] && [ -f "$SBCTL_DB_KEY" ]; then
+        msg "Secure Boot keys are already enrolled. sbctl adds the $EAC_CA_NAME to the"
+        msg "Secure Boot database and signs the change with your Key Exchange Key."
+        confirm "Add the $EAC_CA_NAME now?" || die "Aborted."
+
+        if ! sbctl enroll-keys --append --partial db --custom --ignore-immutable; then
+            die "The firmware did not accept the change. Put the firmware into Setup Mode and run eac-setup again."
+        fi
+    else
+        msg "The firmware is not in Setup Mode and there are no sbctl keys to add the $EAC_CA_NAME with."
+        msg "Reboot into the firmware settings, put Secure Boot into Setup Mode (delete or reset the"
+        msg "Secure Boot keys, keep Secure Boot disabled) and run eac-setup again:"
+        msg "  systemctl reboot --firmware-setup"
+        exit 1
+    fi
+
+    enrolled_in_db "$EAC_CA" || die "$EAC_CA_NAME was not enrolled."
+    enrolled_in_db "$SBCTL_DB_CERT" || die "sbctl's own key was not enrolled."
+    msg "$EAC_CA_NAME is enrolled"
+}
+
+# Sign a file with the user's key and make sure that it worked
+sign_file() {
+    sbctl sign -s "$1" || true
+    sbverify --cert "$SBCTL_DB_CERT" "$1" >/dev/null 2>&1 || die "$1 could not be signed with your key."
+}
+
+# Sign the normal kernels, but never the EAC kernel
+sign_kernels() {
+    local kernel
+
+    while IFS= read -r -d '' kernel; do
+        sign_file "$kernel"
+    done < <(find /boot -maxdepth 1 -name 'vmlinuz-*' ! -name vmlinuz-linux-cachyos-eac -print0)
+}
+
+# Limine verifies its config and the files it loads by their BLAKE2B hashes.
+# This runs every time, so an interrupted run or a changed wallpaper is fixed.
+sign_limine() {
+    local conf="$ESP/limine.conf" line file tmp
+    local -a loaders=()
+
+    sed -i '/^#\?ENABLE_ENROLL_LIMINE_CONFIG=/d' /etc/default/limine
+    echo 'ENABLE_ENROLL_LIMINE_CONFIG=yes' >> /etc/default/limine
+
+    # Set the hash of the wallpapers
+    tmp=$(mktemp)
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" =~ ^([[:space:]]*wallpaper:[[:space:]]*boot\(\):)([^#]*)(#.*)?$ ]]; then
+            file="${BASH_REMATCH[2]%"${BASH_REMATCH[2]##*[![:space:]]}"}"
+            if [ -f "$ESP$file" ]; then
+                line="${BASH_REMATCH[1]}$file#$(b2sum "$ESP$file" | cut -d' ' -f1)"
+            fi
+        fi
+        printf '%s\n' "$line"
+    done < "$conf" > "$tmp"
+    if ! cmp -s "$tmp" "$conf"; then
+        cat "$tmp" > "$conf"
+    fi
+    rm -f "$tmp"
+
+    limine-enroll-config
+    limine-update
+
+    mapfile -t loaders < <(find "$ESP/EFI" -iname 'limine*.efi')
+    if [ "${#loaders[@]}" -eq 0 ]; then
+        loaders=("$ESP/EFI/BOOT/BOOTX64.EFI")
+    fi
+    for file in "${loaders[@]}"; do
+        sbverify --cert "$SBCTL_DB_CERT" "$file" >/dev/null 2>&1 || die "$file was not signed with your key."
+    done
+}
+
+sign_boot_manager() {
+    step "Signing $BOOT_MANAGER_NAME and your normal kernels with your own key"
+
+    case "$BOOT_MANAGER" in
+        systemd-boot)
+            sign_kernels
+            ;;
+        refind)
+            sign_file "$ESP/EFI/refind/refind_x64.efi"
+            sign_kernels
+            ;;
+        limine)
+            sign_limine
+            ;;
+    esac
+}
+
+# Exactly one signature, made by CachyOS
+signed_by_cachyos() {
+    [ -f "$1" ] && sbverify --cert "$EAC_CA" "$1" >/dev/null 2>&1 \
+        && [ "$(sbverify --list "$1" 2>/dev/null | grep -c '^signature')" -eq 1 ]
+}
+
+# sbctl signs every file in its database again on updates, so the
+# CachyOS-signed files must not be in there
+protect_cachyos_files() {
+    local file reinstall=0
+    local -a kernels=()
+
+    step "Keeping sbctl away from the CachyOS-signed files"
+
+    while read -r file; do
+        case "$file" in
+            *cachyos-eac* | "$SDBOOT_UNSIGNED" | "$SDBOOT_SIGNED") ;;
+            "$ESP/EFI/systemd/systemd-bootx64.efi" | "$ESP/EFI/BOOT/BOOTX64.EFI")
+                [ "$BOOT_MANAGER" = systemd-boot ] || continue
+                ;;
+            *) continue ;;
+        esac
+        msg "Removing $file from sbctl's database"
+        sbctl remove-file "$file" >/dev/null
+        reinstall=1
+    done < <(sbctl list-files | grep '^/' || true)
+
+    if [ "$BOOT_MANAGER" = limine ]; then
+        kernels=("$ESP/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz")
+    else
+        kernels=(/boot/vmlinuz-linux-cachyos-eac)
+    fi
+    for file in "${kernels[@]}" "$SDBOOT_SIGNED"; do
+        if ! signed_by_cachyos "$file"; then
+            msg "$file does not carry only the CachyOS signature"
+            reinstall=1
+        fi
+    done
+
+    if [ "$reinstall" -eq 1 ]; then
+        msg "Reinstalling the packages to restore the CachyOS signatures"
+        pacman -S --noconfirm linux-cachyos-eac systemd-boot-cachyos-signed
+        for file in "${kernels[@]}" "$SDBOOT_SIGNED"; do
+            signed_by_cachyos "$file" || die "$file is still not signed only by CachyOS, see $WIKI_URL#troubleshooting"
+        done
+    fi
+    msg "The EAC kernel and systemd-boot are signed by CachyOS"
+}
+
+install_systemd_boot() {
+    local dev disk part target="$ESP/EFI/cachyos-eac/systemd-bootx64.efi"
+
+    step "Installing the CachyOS-signed systemd-boot"
+
+    if [ "$BOOT_MANAGER" = systemd-boot ]; then
+        if ! cmp -s "$SDBOOT_SIGNED" "$ESP/EFI/systemd/systemd-bootx64.efi" \
+           || ! cmp -s "$SDBOOT_SIGNED" "$ESP/EFI/BOOT/BOOTX64.EFI"; then
+            bootctl install
+        fi
+        return
+    fi
+
+    # Limine and rEFInd stay the default. systemd-boot gets its own directory
+    # and firmware entry, which is only used for the EAC boot.
+    if ! cmp -s "$SDBOOT_SIGNED" "$target"; then
+        install -Dm644 "$SDBOOT_SIGNED" "$target"
+    fi
+    if [ -z "$(eac_bootnum)" ]; then
+        dev=$(findmnt -no SOURCE "$ESP")
+        disk="/dev/$(lsblk -no PKNAME "$dev")"
+        part=$(cat "/sys/class/block/$(basename "$dev")/partition")
+        efibootmgr --quiet --create-only --disk "$disk" --part "$part" \
+            --label "$EAC_LABEL" --loader '\EFI\cachyos-eac\systemd-bootx64.efi'
+    fi
+    msg "Firmware boot entry: Boot$(eac_bootnum) $EAC_LABEL"
+}
+
+# The command line of the running system without the options that the boot
+# manager adds and without earlier EAC options, followed by the EAC options
+eac_cmdline() {
+    local opt key
+    local -a keys=(BOOT_IMAGE initrd) opts=()
+
+    for opt in $EAC_REQ; do
+        keys+=("${opt%%=*}")
+    done
+    for opt in $(< /proc/cmdline); do
+        for key in "${keys[@]}"; do
+            [[ "$opt" == "$key="* ]] && continue 2
+        done
+        opts+=("$opt")
+    done
+    echo "${opts[*]} $EAC_REQ"
+}
+
+write_boot_entry() {
+    local kernel initrd options entry="$ESP/loader/entries/cachyos-eac.conf"
+    local refind_conf="$ESP/EFI/refind/refind.conf"
+
+    step "Creating the EAC boot entry"
+
+    if [ "$BOOT_MANAGER" = limine ]; then
+        kernel="/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz"
+        initrd="/$(cat /etc/machine-id)/linux-cachyos-eac/initramfs"
+    else
+        kernel=/vmlinuz-linux-cachyos-eac
+        initrd=/initramfs-linux-cachyos-eac.img
+    fi
+    [ -f "$ESP$kernel" ] || die "$ESP$kernel is missing."
+    [ -f "$ESP$initrd" ] || die "$ESP$initrd is missing."
+
+    options=$(eac_cmdline)
+    [[ " $options " == *" root="* ]] || die "No root= option found in /proc/cmdline."
+
+    printf 'title   CachyOS (EAC)\nlinux   %s\ninitrd  %s\noptions %s\n' "$kernel" "$initrd" "$options" \
+        | install -Dm644 /dev/stdin "$entry"
+    msg "$entry:"
+    sed 's/^/      /' "$entry"
+
+    if [ "$BOOT_MANAGER" = systemd-boot ]; then
+        return
+    fi
+
+    # This systemd-boot only starts the EAC entry, so don't show a menu
+    printf 'default cachyos-eac.conf\ntimeout 0\n' | install -Dm644 /dev/stdin "$ESP/loader/loader.conf"
+
+    # Anything started from the rEFInd menu does not pass the EAC checks
+    if [ "$BOOT_MANAGER" = refind ]; then
+        if ! grep -q '^dont_scan_files.*vmlinuz-linux-cachyos-eac' "$refind_conf"; then
+            printf '\n# Easy Anti-Cheat: boot this only through the "%s" firmware entry\ndont_scan_files +,vmlinuz-linux-cachyos-eac\n' \
+                "$EAC_LABEL" >> "$refind_conf"
+            msg "Hid the EAC kernel in the rEFInd menu"
+        fi
+        if ! grep -q '^dont_scan_dirs.*EFI/cachyos-eac' "$refind_conf"; then
+            printf '\n# Easy Anti-Cheat: boot this only through the "%s" firmware entry\ndont_scan_dirs +,EFI/cachyos-eac\n' \
+                "$EAC_LABEL" >> "$refind_conf"
+            msg "Hid the CachyOS-signed systemd-boot in the rEFInd menu"
+        fi
+    fi
+}
+
+finish() {
+    step "Done"
+
+    if secure_boot_state SecureBoot; then
+        eac-status || true
+        echo
+        if [[ "$(uname -r)" == *-cachyos-eac ]]; then
+            return
+        fi
+        msg "Boot into EAC with: sudo eac-setup boot"
+    else
+        msg "Secure Boot is still disabled. Reboot into the firmware settings and enable it:"
+        msg "  systemctl reboot --firmware-setup"
+        msg "Then boot into EAC with: sudo eac-setup boot"
+    fi
+    if [ "$BOOT_MANAGER" = systemd-boot ]; then
+        msg "You can also select 'CachyOS (EAC)' in the systemd-boot menu."
+    else
+        msg "Don't start the EAC kernel from the $BOOT_MANAGER_NAME menu, that does not pass the EAC checks."
+    fi
+    msg "In the EAC boot, check the result with: sudo eac-status"
+}
+
+if [ "$(id -u)" -ne 0 ]; then
+    die "This script must be run with root privileges."
+fi
+
+ESP=$(bootctl --print-esp-path 2>/dev/null) || die "Could not find the EFI system partition."
+mountpoint -q "$ESP" || die "$ESP is not a mounted EFI system partition."
+
+case "${1:-}" in
+    boot)
+        boot_eac
+        exit
+        ;;
+    -y | --yes)
+        yes=1
+        ;;
+    "") ;;
+    *)
+        sed -n 's/^# \(Usage:\|      \)/\1/p' "$0"
+        exit 1
+        ;;
+esac
+
+check_requirements
+install_tools
+find_boot_manager
+enroll_keys
+install_packages
+sign_boot_manager
+protect_cachyos_files
+install_systemd_boot
+write_boot_entry
+finish
