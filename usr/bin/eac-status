@@ -88,28 +88,68 @@ check_db() {
     fi
 }
 
-# The boot files must only be signed by CachyOS. sbctl may sign them again with
-# your own key, for example through its mkinitcpio hook.
-check_boot_files() {
-    local esp file sigs
+# The file must only be signed by CachyOS. sbctl may sign it again with your
+# own key, for example through its mkinitcpio hook.
+check_signature() {
+    local sigs
 
-    esp=$(bootctl --print-esp-path 2>/dev/null || echo /boot)
-    for file in /boot/vmlinuz-linux-cachyos-eac \
-                "$esp/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz" \
-                "$esp/EFI/systemd/systemd-bootx64.efi" \
-                "$esp/EFI/cachyos-eac/systemd-bootx64.efi"; do
-        [ -f "$file" ] || continue
-        sigs=$(sbverify --list "$file" 2>/dev/null | grep -c '^signature')
-        if [ -f "$tmp/eac.pem" ] && sbverify --cert "$tmp/eac.pem" "$file" >/dev/null 2>&1; then
-            if [ "$sigs" -eq 1 ]; then
-                ok "$file is signed by CachyOS"
-            else
-                fail "$file has $sigs signatures"
-            fi
+    sigs=$(sbverify --list "$1" 2>/dev/null | grep -c '^signature')
+    if [ -f "$tmp/eac.pem" ] && sbverify --cert "$tmp/eac.pem" "$1" >/dev/null 2>&1; then
+        if [ "$sigs" -eq 1 ]; then
+            ok "$1 is signed by CachyOS"
         else
-            fail "$file is not signed by CachyOS"
+            fail "$1 has $sigs signatures"
+        fi
+    else
+        fail "$1 is not signed by CachyOS"
+    fi
+}
+
+# The systemd-boot that starts the EAC kernel. In the EAC boot, systemd-boot
+# reports the file it was started from. Otherwise it is the copy in
+# EFI/cachyos-eac (Limine, rEFInd) or the one from bootctl install.
+eac_boot_loader() {
+    local esp="$1" file path
+    local var=/sys/firmware/efi/efivars/LoaderImageIdentifier-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
+
+    if [[ "$(uname -r)" == *-cachyos-eac ]] && [ -r "$var" ]; then
+        # Skip the 4 byte attributes, the path is UTF-16 with backslashes
+        path=$(tail -c +5 "$var" | iconv -f UTF-16LE -t UTF-8 | tr -d '\0')
+        echo "$esp${path//\\//}"
+        return
+    fi
+    for file in "$esp/EFI/cachyos-eac/systemd-bootx64.efi" "$esp/EFI/systemd/systemd-bootx64.efi"; do
+        if [ -f "$file" ]; then
+            echo "$file"
+            return
         fi
     done
+}
+
+check_boot_files() {
+    local esp file loader found=0
+
+    esp=$(bootctl --print-esp-path 2>/dev/null || echo /boot)
+
+    # systemd-boot and rEFInd use the kernel in /boot, Limine its own copy
+    for file in /boot/vmlinuz-linux-cachyos-eac \
+                "$esp/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz"; do
+        [ -f "$file" ] || continue
+        check_signature "$file"
+        found=1
+    done
+    if [ "$found" -eq 0 ]; then
+        fail "The EAC kernel is missing, install linux-cachyos-eac"
+    fi
+
+    loader=$(eac_boot_loader "$esp")
+    if [ -z "$loader" ]; then
+        fail "No systemd-boot found for the EAC boot entry"
+    elif [ -f "$loader" ]; then
+        check_signature "$loader"
+    else
+        fail "$loader is missing"
+    fi
 }
 
 check_cmdline() {
