@@ -154,9 +154,16 @@ check_boot_files() {
 
 check_cmdline() {
     local opt last
+    local -a opts=(lockdown=integrity "lsm=landlock,lockdown,yama,integrity,bpf" iommu.passthrough=0)
 
-    for opt in lockdown=integrity lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0 \
-               intel_iommu=on module.sig_enforce=1 sysctl.kernel.kexec_load_disabled=1; do
+    # intel_iommu= only exists for Intel VT-d, the AMD IOMMU is on by default
+    # and check_iommu verifies the result on every vendor.
+    if grep -qm1 '^vendor_id.*GenuineIntel' /proc/cpuinfo; then
+        opts+=(intel_iommu=on)
+    fi
+    opts+=(module.sig_enforce=1 sysctl.kernel.kexec_load_disabled=1)
+
+    for opt in "${opts[@]}"; do
         # The kernel uses the last one if an option is given more than once
         last=$(tr ' ' '\n' < /proc/cmdline | grep "^${opt%%=*}=" | tail -n1)
         if [ "$last" = "$opt" ]; then
