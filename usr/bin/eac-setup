@@ -22,6 +22,7 @@ SBCTL_DB_KEY=/var/lib/sbctl/keys/db/db.key
 SBCTL_DB_CERT=/var/lib/sbctl/keys/db/db.pem
 EFI_GLOBAL=8be4df61-93ca-11d2-aa0d-00e098032b8c
 WIKI_URL=https://wiki.cachyos.org/configuration/easy_anti_cheat/
+ISSUE_URL=https://github.com/CachyOS/CachyOS-Settings/issues
 
 yes=0
 
@@ -49,7 +50,7 @@ confirm() {
     [[ "$answer" == [yY]* ]]
 }
 
-# The firmware entry of the CachyOS-signed systemd-boot (Limine and rEFInd).
+# The firmware entry of the CachyOS-signed systemd-boot (Limine, rEFInd, GRUB).
 # It has to point to the copy on this EFI system partition.
 eac_bootnum() {
     local partuuid
@@ -66,7 +67,7 @@ boot_eac() {
     [ -f "$ESP/loader/entries/cachyos-eac.conf" ] || die "There is no EAC boot entry, run eac-setup first."
 
     if [ -d "$ESP/EFI/cachyos-eac" ]; then
-        # Limine and rEFInd: start the separate systemd-boot on the next boot
+        # Limine, rEFInd and GRUB: start the separate systemd-boot on the next boot
         num=$(eac_bootnum)
         if [ -z "$num" ]; then
             die "The '$EAC_LABEL' firmware boot entry is missing, run eac-setup to create it again."
@@ -91,13 +92,14 @@ boot_manager_of() {
         *cachyos-eac*) ;;
         *limine*) echo limine ;;
         *refind*) echo refind ;;
+        *grub*) echo grub ;;
         *systemd*) echo systemd-boot ;;
     esac
 }
 
 # The boot manager that started this system, or else the first one in
-# BootOrder. In the EAC boot of Limine and rEFInd, the running one is the
-# separate systemd-boot, which does not count.
+# BootOrder. In the EAC boot of Limine, rEFInd and GRUB, the running one is
+# the separate systemd-boot, which does not count.
 detect_boot_manager() {
     local num found
     local -a installed=()
@@ -117,11 +119,14 @@ detect_boot_manager() {
     if [ -f "$ESP/EFI/refind/refind_x64.efi" ]; then
         installed+=(refind)
     fi
+    if [ -d /boot/grub ] && [ -n "$(find "$ESP/EFI" -iname grubx64.efi -print -quit)" ]; then
+        installed+=(grub)
+    fi
     if [ -f "$ESP/EFI/systemd/systemd-bootx64.efi" ]; then
         installed+=(systemd-boot)
     fi
     if [ "${#installed[@]}" -gt 1 ]; then
-        die "Found more than one boot manager (${installed[*]}). Run eac-setup with EAC_BOOT_MANAGER set to the one you use."
+        die "Found more than one boot manager (${installed[*]}). Set the one you use, for example: sudo EAC_BOOT_MANAGER=${installed[0]} eac-setup"
     fi
     echo "${installed[*]}"
 }
@@ -157,6 +162,8 @@ install_tools() {
 }
 
 find_boot_manager() {
+    local boot_dev
+
     step "Looking for the boot manager"
 
     BOOT_MANAGER=${EAC_BOOT_MANAGER:-$(detect_boot_manager)}
@@ -173,16 +180,41 @@ find_boot_manager() {
                 die "ENABLE_UKI=yes is set in /etc/default/limine, which EAC does not accept."
             fi
             ;;
+        grub)
+            # The initramfs is copied to the EFI system partition, which is not
+            # encrypted. With an encrypted /boot it can hold the key of the disk.
+            boot_dev=$(findmnt -no SOURCE --target /boot)
+            if lsblk -sno TYPE "${boot_dev%%\[*}" | grep -qx crypt; then
+                die "/boot is encrypted, which is not supported with GRUB."
+            fi
+            ;;
         *)
-            die "No supported boot manager found (systemd-boot, Limine or rEFInd)."
+            die "No supported boot manager found (systemd-boot, Limine, rEFInd or GRUB)."
             ;;
     esac
     case "$BOOT_MANAGER" in
         limine) BOOT_MANAGER_NAME=Limine ;;
         refind) BOOT_MANAGER_NAME=rEFInd ;;
+        grub) BOOT_MANAGER_NAME=GRUB ;;
         *) BOOT_MANAGER_NAME=systemd-boot ;;
     esac
+
+    # Where systemd-boot finds the EAC kernel on the EFI system partition.
+    # Limine keeps its kernels there, for GRUB they are copied to the same place.
+    case "$BOOT_MANAGER" in
+        limine | grub)
+            EAC_KERNEL="/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz"
+            EAC_INITRD="/$(cat /etc/machine-id)/linux-cachyos-eac/initramfs"
+            ;;
+        *)
+            EAC_KERNEL=/vmlinuz-linux-cachyos-eac
+            EAC_INITRD=/initramfs-linux-cachyos-eac.img
+            ;;
+    esac
     msg "Boot manager: $BOOT_MANAGER_NAME, EFI system partition: $ESP"
+    if [ "$BOOT_MANAGER" = grub ]; then
+        msg "GRUB support is experimental. Please report problems to $ISSUE_URL"
+    fi
 }
 
 install_packages() {
@@ -203,6 +235,10 @@ install_packages() {
     fi
     if grep -qx 'r8125-dkms' <<< "$installed"; then
         pkgs+=(linux-cachyos-eac-r8125)
+    fi
+    # Keeps the copy of the EAC kernel on the EFI system partition up to date
+    if [ "$BOOT_MANAGER" = grub ]; then
+        pkgs+=(cachyos-eac-grub-hook)
     fi
 
     # The self-signed systemd-boot from the Secure Boot guide conflicts with
@@ -354,6 +390,35 @@ sign_limine() {
     done
 }
 
+# GRUB only starts kernels under Secure Boot with your own keys when it is
+# installed with the tpm module and without the shim lock, as in the Secure
+# Boot guide. A GRUB that is already signed with your key is left alone.
+sign_grub() {
+    local grub id fallback="$ESP/EFI/BOOT/BOOTX64.EFI" update_fallback=0
+    local -a found=()
+
+    mapfile -t found < <(find "$ESP/EFI" -iname grubx64.efi ! -ipath "$ESP/EFI/BOOT/*")
+    if [ "${#found[@]}" -ne 1 ]; then
+        die "Expected one grubx64.efi on the EFI system partition, found ${#found[@]}."
+    fi
+    grub=${found[0]}
+    if sbverify --cert "$SBCTL_DB_CERT" "$grub" >/dev/null 2>&1; then
+        return
+    fi
+
+    # The fallback boot loader is a copy of GRUB on CachyOS, keep it one
+    if cmp -s "$grub" "$fallback"; then
+        update_fallback=1
+    fi
+    id=$(basename "$(dirname "$grub")")
+    grub-install --target=x86_64-efi --efi-directory="$ESP" --bootloader-id="$id" \
+        --modules=tpm --disable-shim-lock
+    sign_file "$grub"
+    if [ "$update_fallback" -eq 1 ]; then
+        cp "$grub" "$fallback"
+    fi
+}
+
 sign_boot_manager() {
     step "Signing $BOOT_MANAGER_NAME and your normal kernels with your own key"
 
@@ -367,6 +432,10 @@ sign_boot_manager() {
             ;;
         limine)
             sign_limine
+            ;;
+        grub)
+            sign_grub
+            sign_kernels
             ;;
     esac
 }
@@ -399,7 +468,7 @@ protect_cachyos_files() {
     done < <(sbctl list-files | grep '^/' || true)
 
     if [ "$BOOT_MANAGER" = limine ]; then
-        kernels=("$ESP/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz")
+        kernels=("$ESP$EAC_KERNEL")
     else
         kernels=(/boot/vmlinuz-linux-cachyos-eac)
     fi
@@ -433,7 +502,7 @@ install_systemd_boot() {
         return
     fi
 
-    # Limine and rEFInd stay the default. systemd-boot gets its own directory
+    # Limine, rEFInd and GRUB stay the default. systemd-boot gets its own directory
     # and firmware entry, which is only used for the EAC boot.
     if ! cmp -s "$SDBOOT_SIGNED" "$target"; then
         install -Dm644 "$SDBOOT_SIGNED" "$target"
@@ -446,6 +515,33 @@ install_systemd_boot() {
             --label "$EAC_LABEL" --loader '\EFI\cachyos-eac\systemd-bootx64.efi'
     fi
     msg "Firmware boot entry: Boot$(eac_bootnum) $EAC_LABEL"
+}
+
+# GRUB keeps the kernels on the root filesystem, which systemd-boot cannot
+# read. The mkinitcpio hook from cachyos-eac-grub-hook updates these copies
+# afterwards.
+copy_eac_kernel() {
+    local need free
+
+    [ "$BOOT_MANAGER" = grub ] || return 0
+
+    step "Copying the EAC kernel to the EFI system partition"
+
+    if cmp -s /boot/vmlinuz-linux-cachyos-eac "$ESP$EAC_KERNEL" \
+       && cmp -s /boot/initramfs-linux-cachyos-eac.img "$ESP$EAC_INITRD"; then
+        msg "$ESP$EAC_KERNEL is up to date"
+        return
+    fi
+    if [ ! -f "$ESP$EAC_KERNEL" ]; then
+        need=$(du -kc /boot/vmlinuz-linux-cachyos-eac /boot/initramfs-linux-cachyos-eac.img | tail -n1 | cut -f1)
+        free=$(df -k --output=avail "$ESP" | tail -n1)
+        if [ "$free" -lt "$need" ]; then
+            die "The EFI system partition has $((free / 1024)) MiB free, the EAC kernel needs $((need / 1024)) MiB."
+        fi
+    fi
+    install -Dm644 /boot/vmlinuz-linux-cachyos-eac "$ESP$EAC_KERNEL"
+    install -Dm644 /boot/initramfs-linux-cachyos-eac.img "$ESP$EAC_INITRD"
+    msg "Copied the EAC kernel and its initramfs to $(dirname "$ESP$EAC_KERNEL")"
 }
 
 # The command line of the running system without the options that the boot
@@ -467,25 +563,18 @@ eac_cmdline() {
 }
 
 write_boot_entry() {
-    local kernel initrd options entry="$ESP/loader/entries/cachyos-eac.conf"
+    local options entry="$ESP/loader/entries/cachyos-eac.conf"
     local refind_conf="$ESP/EFI/refind/refind.conf"
 
     step "Creating the EAC boot entry"
 
-    if [ "$BOOT_MANAGER" = limine ]; then
-        kernel="/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz"
-        initrd="/$(cat /etc/machine-id)/linux-cachyos-eac/initramfs"
-    else
-        kernel=/vmlinuz-linux-cachyos-eac
-        initrd=/initramfs-linux-cachyos-eac.img
-    fi
-    [ -f "$ESP$kernel" ] || die "$ESP$kernel is missing."
-    [ -f "$ESP$initrd" ] || die "$ESP$initrd is missing."
+    [ -f "$ESP$EAC_KERNEL" ] || die "$ESP$EAC_KERNEL is missing."
+    [ -f "$ESP$EAC_INITRD" ] || die "$ESP$EAC_INITRD is missing."
 
     options=$(eac_cmdline)
     [[ " $options " == *" root="* ]] || die "No root= option found in /proc/cmdline."
 
-    printf 'title   CachyOS (EAC)\nlinux   %s\ninitrd  %s\noptions %s\n' "$kernel" "$initrd" "$options" \
+    printf 'title   CachyOS (EAC)\nlinux   %s\ninitrd  %s\noptions %s\n' "$EAC_KERNEL" "$EAC_INITRD" "$options" \
         | install -Dm644 /dev/stdin "$entry"
     msg "$entry:"
     sed 's/^/      /' "$entry"
@@ -510,6 +599,11 @@ write_boot_entry() {
             msg "Hid the CachyOS-signed systemd-boot in the rEFInd menu"
         fi
     fi
+
+    # GRUB lists the firmware boot entries in its menu
+    if [ "$BOOT_MANAGER" = grub ] && ! grep -q "'$EAC_LABEL (EFI BootNext)'" /boot/grub/grub.cfg; then
+        grub-mkconfig -o /boot/grub/grub.cfg
+    fi
 }
 
 finish() {
@@ -529,6 +623,9 @@ finish() {
     fi
     if [ "$BOOT_MANAGER" = systemd-boot ]; then
         msg "You can also select 'CachyOS (EAC)' in the systemd-boot menu."
+    elif [ "$BOOT_MANAGER" = grub ]; then
+        msg "You can also select '$EAC_LABEL (EFI BootNext)' in the GRUB menu."
+        msg "Don't start linux-cachyos-eac itself from the GRUB menu, that does not pass the EAC checks."
     else
         msg "Don't start the EAC kernel from the $BOOT_MANAGER_NAME menu, that does not pass the EAC checks."
     fi
@@ -565,5 +662,6 @@ install_packages
 sign_boot_manager
 protect_cachyos_files
 install_systemd_boot
+copy_eac_kernel
 write_boot_entry
 finish
