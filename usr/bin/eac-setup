@@ -599,10 +599,53 @@ write_boot_entry() {
             msg "Hid the CachyOS-signed systemd-boot in the rEFInd menu"
         fi
     fi
+}
 
-    # GRUB lists the firmware boot entries in its menu
-    if [ "$BOOT_MANAGER" = grub ] && ! grep -q "'$EAC_LABEL (EFI BootNext)'" /boot/grub/grub.cfg; then
-        grub-mkconfig -o /boot/grub/grub.cfg
+# The kernel that GRUB starts by default: the one of the first menu entry
+grub_default_kernel() {
+    awk '/^menuentry / { found = 1 } found && $1 == "linux" { print $2; exit }' /boot/grub/grub.cfg
+}
+
+# GRUB lists the firmware boot entries in its menu, which adds the entry
+# "CachyOS EAC (EFI BootNext)". Two things can make GRUB start EAC on every
+# boot afterwards, both are fixed here.
+update_grub_menu() {
+    local cfg=/boot/grub/grub.cfg conf=/etc/default/grub kernel pkgbase
+
+    [ "$BOOT_MANAGER" = grub ] || return 0
+
+    step "Updating the GRUB menu"
+
+    if ! grep -q "'$EAC_LABEL (EFI BootNext)'" "$cfg"; then
+        grub-mkconfig -o "$cfg"
+    fi
+
+    # Without GRUB_TOP_LEVEL, GRUB sorts the kernels by name and can make the
+    # EAC kernel its default. Started by GRUB, it does not pass the EAC checks.
+    if [[ "$(grub_default_kernel)" == */vmlinuz-linux-cachyos-eac ]]; then
+        pkgbase=$(cat "/usr/lib/modules/$(uname -r)/pkgbase" 2>/dev/null || true)
+        kernel=/boot/vmlinuz-$pkgbase
+        if [ -z "$pkgbase" ] || [ "$pkgbase" = linux-cachyos-eac ] || [ ! -f "$kernel" ]; then
+            kernel=$(find /boot -maxdepth 1 -name 'vmlinuz-*' ! -name 'vmlinuz-linux-cachyos-eac' | sort | head -n1)
+        fi
+        if grep -q '^GRUB_TOP_LEVEL=' "$conf" || [ -z "$kernel" ]; then
+            msg "Warning: GRUB starts linux-cachyos-eac by default. Set GRUB_TOP_LEVEL in $conf to your normal kernel."
+        else
+            printf "\n# Added by eac-setup: the kernel that GRUB starts by default\nGRUB_TOP_LEVEL='%s'\n" "$kernel" >> "$conf"
+            grub-mkconfig -o "$cfg"
+            msg "Set GRUB_TOP_LEVEL='$kernel' in $conf, GRUB had made the EAC kernel its default"
+        fi
+    fi
+
+    # With GRUB_SAVEDEFAULT=true, GRUB remembers the entry that was selected
+    # last. For the BootNext entry this means that every boot starts EAC.
+    GRUB_SAVES_ENTRY=0
+    if sed -n "/'efi-bootnext-$(eac_bootnum)'/,/^  }/p" "$cfg" | grep -q savedefault; then
+        GRUB_SAVES_ENTRY=1
+    fi
+    if grub-editenv - list | grep -qx "saved_entry=efi-bootnext-$(eac_bootnum)"; then
+        grub-editenv - unset saved_entry
+        msg "GRUB had saved the EAC entry as its default, which started EAC on every boot. Removed it."
     fi
 }
 
@@ -623,6 +666,10 @@ finish() {
     fi
     if [ "$BOOT_MANAGER" = systemd-boot ]; then
         msg "You can also select 'CachyOS (EAC)' in the systemd-boot menu."
+    elif [ "$BOOT_MANAGER" = grub ] && [ "$GRUB_SAVES_ENTRY" -eq 1 ]; then
+        msg "Don't select '$EAC_LABEL (EFI BootNext)' in the GRUB menu. GRUB_SAVEDEFAULT=true is set,"
+        msg "so GRUB would remember that entry and start EAC on every boot."
+        msg "Don't start linux-cachyos-eac itself from the GRUB menu, that does not pass the EAC checks."
     elif [ "$BOOT_MANAGER" = grub ]; then
         msg "You can also select '$EAC_LABEL (EFI BootNext)' in the GRUB menu."
         msg "Don't start linux-cachyos-eac itself from the GRUB menu, that does not pass the EAC checks."
@@ -664,4 +711,5 @@ protect_cachyos_files
 install_systemd_boot
 copy_eac_kernel
 write_boot_entry
+update_grub_menu
 finish
