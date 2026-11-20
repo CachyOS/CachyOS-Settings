@@ -3,6 +3,7 @@
 # eac-status checks if the system is set up for Easy Anti-Cheat Linux v2.
 # Run it in the linux-cachyos-eac boot entry to also check the running kernel.
 
+EAC_CA="${EAC_CA:-/usr/share/cachyos-eac/cachyos-eac-ca.crt}"
 EAC_CA_NAME="${EAC_CA_NAME:-CachyOS EAC CA}"
 WIKI_URL=https://wiki.cachyos.org/configuration/easy_anti_cheat/#troubleshooting
 
@@ -23,6 +24,7 @@ done
 
 failed=0
 warned=0
+have_ca=0
 
 ok() {
     echo "[ OK ] $*"
@@ -36,6 +38,11 @@ fail() {
 warn() {
     echo "[WARN] $*"
     warned=$((warned + 1))
+}
+
+# What to do about the line above
+hint() {
+    echo "       $*"
 }
 
 # Common name of a DER certificate
@@ -66,23 +73,49 @@ check_tpm() {
         ok "TPM 2.0 found"
     else
         fail "No TPM 2.0 found"
+        return
+    fi
+
+    # The kernel only lists the PCR banks that are active
+    if [ -d /sys/class/tpm/tpm0/pcr-sha256 ]; then
+        ok "SHA-256 PCR bank is active"
+    else
+        fail "SHA-256 PCR bank is not active, enable it in the firmware settings"
     fi
 }
 
-# Find the EAC certificate in db
+# The CA from cachyos-eac-signing-key, as DER to compare whole certificates.
+# The checks that need it are skipped without it.
+load_ca() {
+    if openssl x509 -in "$EAC_CA" -outform DER -out "$tmp/eac.der" 2>/dev/null; then
+        have_ca=1
+        return
+    fi
+    fail "$EAC_CA is missing, install cachyos-eac-signing-key"
+    hint "The checks of the signatures and of the certificate that verified the boot are skipped."
+}
+
+# Find the EAC certificate in db. The whole certificate has to match, a
+# certificate that only has the same name does not verify the boot files.
 check_db() {
-    local der
+    local der same_name=0
+
+    [ "$have_ca" -eq 1 ] || return 0
 
     sbctl --disable-landlock --quiet export-enrolled-keys --dir "$tmp/keys" >/dev/null
     for der in "$tmp"/keys/DB/*.der; do
-        if [ "$(cn < "$der")" = "$EAC_CA_NAME" ]; then
-            openssl x509 -inform DER -in "$der" -out "$tmp/eac.pem"
-            break
+        # db is empty in Setup Mode
+        [ -f "$der" ] || continue
+        if cmp -s "$der" "$tmp/eac.der"; then
+            ok "$EAC_CA_NAME is enrolled"
+            return
+        elif [ "$(cn < "$der")" = "$EAC_CA_NAME" ]; then
+            same_name=1
         fi
     done
 
-    if [ -f "$tmp/eac.pem" ]; then
-        ok "$EAC_CA_NAME is enrolled"
+    if [ "$same_name" -eq 1 ]; then
+        fail "A certificate named $EAC_CA_NAME is enrolled, but it is not the one from cachyos-eac-signing-key"
     else
         fail "$EAC_CA_NAME is not enrolled, see the wiki on how to enroll it"
     fi
@@ -93,8 +126,10 @@ check_db() {
 check_signature() {
     local sigs
 
+    [ "$have_ca" -eq 1 ] || return 0
+
     sigs=$(sbverify --list "$1" 2>/dev/null | grep -c '^signature')
-    if [ -f "$tmp/eac.pem" ] && sbverify --cert "$tmp/eac.pem" "$1" >/dev/null 2>&1; then
+    if sbverify --cert "$EAC_CA" "$1" >/dev/null 2>&1; then
         if [ "$sigs" -eq 1 ]; then
             ok "$1 is signed by CachyOS"
         else
@@ -145,10 +180,14 @@ check_boot_files() {
 
     # With GRUB, systemd-boot starts a copy of the kernel and its initramfs on
     # the EFI system partition. An old copy does not match the installed modules.
+    # The hook from cachyos-eac-grub-hook keeps it up to date and is only
+    # installed on GRUB systems.
     copy="$esp/$(cat /etc/machine-id)/linux-cachyos-eac"
-    if [ -d /boot/grub ] && [ -f "$copy/vmlinuz" ]; then
-        if cmp -s /boot/vmlinuz-linux-cachyos-eac "$copy/vmlinuz" \
-           && cmp -s /boot/initramfs-linux-cachyos-eac.img "$copy/initramfs"; then
+    if [ -f /usr/lib/initcpio/post/cachyos-eac-esp ]; then
+        if [ ! -f "$copy/vmlinuz" ] || [ ! -f "$copy/initramfs" ]; then
+            fail "The copy of the EAC kernel in $copy is missing, run: sudo eac-setup"
+        elif cmp -s /boot/vmlinuz-linux-cachyos-eac "$copy/vmlinuz" \
+             && cmp -s /boot/initramfs-linux-cachyos-eac.img "$copy/initramfs"; then
             ok "The copy of the EAC kernel in $copy is up to date"
         else
             fail "The copy of the EAC kernel in $copy is out of date, run: sudo eac-setup"
@@ -165,8 +204,13 @@ check_boot_files() {
     fi
 }
 
+# The last one counts if an option is given more than once
+on_cmdline() {
+    [ "$(tr ' ' '\n' < /proc/cmdline | grep "^${1%%=*}=" | tail -n1)" = "$1" ]
+}
+
 check_cmdline() {
-    local opt last
+    local opt
     local -a opts=(lockdown=integrity "lsm=landlock,lockdown,yama,integrity,bpf" iommu.passthrough=0)
 
     # intel_iommu= only exists for Intel VT-d, the AMD IOMMU is on by default
@@ -176,10 +220,19 @@ check_cmdline() {
     fi
     opts+=(module.sig_enforce=1 sysctl.kernel.kexec_load_disabled=1)
 
+    # The EAC kernel was started from the menu of Limine or GRUB, or from the
+    # entry that systemd-boot creates for it. These three options are only on
+    # the command line of the EAC entry, the others can be part of the normal
+    # boot entries as well.
+    if ! on_cmdline lockdown=integrity && ! on_cmdline module.sig_enforce=1 \
+       && ! on_cmdline sysctl.kernel.kexec_load_disabled=1; then
+        fail "The EAC options are missing from the kernel command line, the wrong boot entry was started"
+        hint "Reboot into the EAC entry with: sudo eac-setup boot"
+        return
+    fi
+
     for opt in "${opts[@]}"; do
-        # The kernel uses the last one if an option is given more than once
-        last=$(tr ' ' '\n' < /proc/cmdline | grep "^${opt%%=*}=" | tail -n1)
-        if [ "$last" = "$opt" ]; then
+        if on_cmdline "$opt"; then
             ok "$opt"
         else
             fail "$opt is missing from the kernel command line"
@@ -188,6 +241,8 @@ check_cmdline() {
 }
 
 check_kernel() {
+    local config
+
     if grep -q '\[integrity\]' /sys/kernel/security/lockdown; then
         ok "Lockdown is in integrity mode"
     else
@@ -210,6 +265,22 @@ check_kernel() {
         ok "kexec is disabled"
     else
         fail "kexec is not disabled"
+    fi
+
+    if [ -r /sys/kernel/btf/vmlinux ]; then
+        ok "BTF is available"
+    else
+        fail "BTF is not available (/sys/kernel/btf/vmlinux)"
+    fi
+
+    # Older EAC kernels load ACPI tables from the initramfs, which lockdown
+    # does not stop
+    if config=$(zcat /proc/config.gz 2>/dev/null); then
+        if grep -qx 'CONFIG_ACPI_TABLE_UPGRADE=y' <<< "$config"; then
+            fail "This EAC kernel loads ACPI tables from the initramfs, update it with: sudo pacman -Syu"
+        else
+            ok "The kernel does not load ACPI tables from the initramfs"
+        fi
     fi
 }
 
@@ -259,26 +330,54 @@ check_iommu() {
 
 # Certificates the firmware used to verify the boot files, recorded in PCR 7
 check_pcr7() {
-    local data name
+    local data name verified=0
+    local -a others=()
 
-    tpm2_eventlog /sys/kernel/security/tpm0/binary_bios_measurements 2>/dev/null \
-        | awk '/EV_EFI_VARIABLE_AUTHORITY/ {f=1} f && /VariableData:/ {print $2; f=0}' \
-        | tr -d '"' \
-        | while read -r data; do
-            # Skip the 16 byte owner GUID in front of the certificate
-            echo "${data:32}" | tr a-f A-F | basenc --base16 -d 2>/dev/null | cn
-        done > "$tmp/authorities"
+    [ "$have_ca" -eq 1 ] || return 0
 
-    if grep -qx "$EAC_CA_NAME" "$tmp/authorities"; then
+    # tpm2_eventlog stops at an event that it cannot parse. It has printed the
+    # events before it, which are often enough, so only its output counts.
+    tpm2_eventlog /sys/kernel/security/tpm0/binary_bios_measurements > "$tmp/eventlog" 2>/dev/null
+    if [ ! -s "$tmp/eventlog" ]; then
+        fail "The TPM event log could not be read, it tells which certificate verified the boot"
+        return
+    fi
+
+    while read -r data; do
+        # 16 bytes owner GUID, then the certificate or hash
+        [ "${#data}" -gt 32 ] || continue
+        echo "${data:32}" | tr a-f A-F | basenc --base16 -d > "$tmp/authority.der" 2>/dev/null
+        if cmp -s "$tmp/authority.der" "$tmp/eac.der"; then
+            verified=1
+            continue
+        fi
+        name=$(cn < "$tmp/authority.der")
+        if [ -z "$name" ]; then
+            name="an entry without a name (a hash or a certificate without a common name)"
+        elif [ "$name" = "$EAC_CA_NAME" ]; then
+            name="another certificate named $EAC_CA_NAME"
+        fi
+        others+=("$name")
+    done < <(awk '/EventNum:/ {f=0} /EV_EFI_VARIABLE_AUTHORITY/ {f=1} f && /VariableData:/ {print $2; f=0}' \
+                "$tmp/eventlog" | tr -d '"')
+
+    if [ "$verified" -eq 1 ]; then
         ok "Boot was verified by $EAC_CA_NAME"
+    elif [ "${#others[@]}" -eq 0 ]; then
+        # A firmware that verifies the boot files records at least one certificate
+        fail "Boot was not verified by $EAC_CA_NAME, the firmware recorded no certificate at all"
+        hint "The firmware probably starts boot files without verifying them."
+        if grep -qi 'micro-star' /sys/class/dmi/id/board_vendor 2>/dev/null; then
+            hint "On MSI boards, set 'Secure Boot Preset' to 'Maximum Security' in the firmware setup,"
+            hint "or 'Image Execution Policy' to 'Deny Execute' on older firmware."
+        fi
     else
         fail "Boot was not verified by $EAC_CA_NAME"
     fi
 
-    # Not in a pipe, warn has to count in this shell
-    while read -r name; do
-        warn "Boot was also verified by $name"
-    done < <(grep -v -e "^$EAC_CA_NAME$" -e '^Microsoft' "$tmp/authorities")
+    for name in "${others[@]}"; do
+        [[ "$name" == Microsoft* ]] || warn "Boot was also verified by $name"
+    done
 }
 
 # Print the result and exit with 1 if a check failed. The checks only cover this
@@ -301,6 +400,7 @@ summary() {
 
 check_secure_boot
 check_tpm
+load_ca
 check_db
 check_boot_files
 
