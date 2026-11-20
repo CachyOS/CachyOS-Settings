@@ -127,11 +127,12 @@ eac_boot_loader() {
 }
 
 check_boot_files() {
-    local esp file loader found=0
+    local esp file loader copy found=0
 
     esp=$(bootctl --print-esp-path 2>/dev/null || echo /boot)
 
-    # systemd-boot and rEFInd use the kernel in /boot, Limine its own copy
+    # systemd-boot and rEFInd use the kernel in /boot, Limine and GRUB a copy
+    # on the EFI system partition
     for file in /boot/vmlinuz-linux-cachyos-eac \
                 "$esp/$(cat /etc/machine-id)/linux-cachyos-eac/vmlinuz"; do
         [ -f "$file" ] || continue
@@ -140,6 +141,18 @@ check_boot_files() {
     done
     if [ "$found" -eq 0 ]; then
         fail "The EAC kernel is missing, install linux-cachyos-eac"
+    fi
+
+    # With GRUB, systemd-boot starts a copy of the kernel and its initramfs on
+    # the EFI system partition. An old copy does not match the installed modules.
+    copy="$esp/$(cat /etc/machine-id)/linux-cachyos-eac"
+    if [ -d /boot/grub ] && [ -f "$copy/vmlinuz" ]; then
+        if cmp -s /boot/vmlinuz-linux-cachyos-eac "$copy/vmlinuz" \
+           && cmp -s /boot/initramfs-linux-cachyos-eac.img "$copy/initramfs"; then
+            ok "The copy of the EAC kernel in $copy is up to date"
+        else
+            fail "The copy of the EAC kernel in $copy is out of date, run: sudo eac-setup"
+        fi
     fi
 
     loader=$(eac_boot_loader "$esp")
