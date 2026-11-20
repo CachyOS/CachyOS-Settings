@@ -21,6 +21,7 @@ SDBOOT_UNSIGNED=/usr/lib/systemd/boot/efi/systemd-bootx64.efi
 SBCTL_DB_KEY=/var/lib/sbctl/keys/db/db.key
 SBCTL_DB_CERT=/var/lib/sbctl/keys/db/db.pem
 EFI_GLOBAL=8be4df61-93ca-11d2-aa0d-00e098032b8c
+GRUB_STATE=/var/lib/eac-setup/grub.sha256
 WIKI_URL=https://wiki.cachyos.org/configuration/easy_anti_cheat/
 ISSUE_URL=https://github.com/CachyOS/CachyOS-Settings/issues
 
@@ -119,7 +120,7 @@ detect_boot_manager() {
     if [ -f "$ESP/EFI/refind/refind_x64.efi" ]; then
         installed+=(refind)
     fi
-    if [ -d /boot/grub ] && [ -n "$(find "$ESP/EFI" -iname grubx64.efi -print -quit)" ]; then
+    if [ -d /boot/grub ] && [[ -n "$(compgen -G "$ESP/EFI/*/grubx64.efi")" ]]; then
         installed+=(grub)
     fi
     if [ -f "$ESP/EFI/systemd/systemd-bootx64.efi" ]; then
@@ -392,17 +393,24 @@ sign_limine() {
 
 # GRUB only starts kernels under Secure Boot with your own keys when it is
 # installed with the tpm module and without the shim lock, as in the Secure
-# Boot guide. A GRUB that is already signed with your key is left alone.
+# Boot guide. A GRUB with the shim lock stops in rescue mode, even when it is
+# signed with your key. The signature does not tell how GRUB was installed, so
+# the checksum of the image that was installed here is kept, and any other
+# image is installed again.
 sign_grub() {
-    local grub id fallback="$ESP/EFI/BOOT/BOOTX64.EFI" update_fallback=0
+    local grub id file sum fallback="$ESP/EFI/BOOT/BOOTX64.EFI" update_fallback=0
     local -a found=()
 
-    mapfile -t found < <(find "$ESP/EFI" -iname grubx64.efi ! -ipath "$ESP/EFI/BOOT/*")
+    while IFS= read -r file; do
+        # Not the fallback boot loader
+        [[ "${file,,}" == "${ESP,,}/efi/boot/"* ]] || found+=("$file")
+    done < <(compgen -G "$ESP/EFI/*/grubx64.efi" || true)
     if [ "${#found[@]}" -ne 1 ]; then
         die "Expected one grubx64.efi on the EFI system partition, found ${#found[@]}."
     fi
     grub=${found[0]}
-    if sbverify --cert "$SBCTL_DB_CERT" "$grub" >/dev/null 2>&1; then
+    if sbverify --cert "$SBCTL_DB_CERT" "$grub" >/dev/null 2>&1 \
+       && [ "$(cat "$GRUB_STATE" 2>/dev/null)" = "$(sha256sum < "$grub")" ]; then
         return
     fi
 
@@ -414,6 +422,8 @@ sign_grub() {
     grub-install --target=x86_64-efi --efi-directory="$ESP" --bootloader-id="$id" \
         --modules=tpm --disable-shim-lock
     sign_file "$grub"
+    sum=$(sha256sum < "$grub")
+    install -Dm644 /dev/stdin "$GRUB_STATE" <<< "$sum"
     if [ "$update_fallback" -eq 1 ]; then
         cp "$grub" "$fallback"
     fi
