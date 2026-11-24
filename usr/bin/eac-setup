@@ -22,6 +22,8 @@ SBCTL_DB_KEY=/var/lib/sbctl/keys/db/db.key
 SBCTL_DB_CERT=/var/lib/sbctl/keys/db/db.pem
 EFI_GLOBAL=8be4df61-93ca-11d2-aa0d-00e098032b8c
 GRUB_STATE=/var/lib/eac-setup/grub.sha256
+LAUNCHER=/usr/local/share/applications/cachyos-eac-boot.desktop
+LAUNCHER_NAME="Reboot into Easy Anti-Cheat"
 WIKI_URL=https://wiki.cachyos.org/configuration/easy_anti_cheat/
 ISSUE_URL=https://github.com/CachyOS/CachyOS-Settings/issues
 
@@ -74,9 +76,15 @@ boot_eac() {
             die "The '$EAC_LABEL' firmware boot entry is missing, run eac-setup to create it again."
         fi
         efibootmgr --quiet --bootnext "$num"
-        systemctl reboot
-    else
-        systemctl reboot --boot-loader-entry=cachyos-eac.conf
+        # A reboot that is blocked, for example by an inhibitor, must not leave
+        # the EAC entry selected, or the next normal reboot would start EAC
+        if ! systemctl reboot; then
+            efibootmgr --quiet --delete-bootnext
+            die "The reboot did not start."
+        fi
+    elif ! systemctl reboot --boot-loader-entry=cachyos-eac.conf; then
+        bootctl set-oneshot ""
+        die "The reboot did not start."
     fi
 }
 
@@ -611,6 +619,31 @@ write_boot_entry() {
     fi
 }
 
+# An entry for the application menu that does the same as "eac-setup boot".
+# It is created here and not shipped with the package, so it only shows up on
+# systems with the EAC setup. pkexec asks for the password before the reboot.
+create_launcher() {
+    local content
+
+    command -v pkexec >/dev/null || return 0
+
+    content="[Desktop Entry]
+Type=Application
+Name=$LAUNCHER_NAME
+Comment=Restarts immediately into the Easy Anti-Cheat boot entry, save your work first
+Exec=pkexec /usr/bin/eac-setup boot
+TryExec=pkexec
+Icon=system-reboot
+Terminal=false
+Categories=Game;
+Keywords=eac;anticheat;reboot;cachyos;"
+
+    if [ "$(cat "$LAUNCHER" 2>/dev/null)" != "$content" ]; then
+        install -Dm644 /dev/stdin "$LAUNCHER" <<< "$content"
+        msg "Added '$LAUNCHER_NAME' to the application menu"
+    fi
+}
+
 # The kernel that GRUB starts by default: the one of the first menu entry
 grub_default_kernel() {
     awk '/^menuentry / { found = 1 } found && $1 == "linux" { print $2; exit }' /boot/grub/grub.cfg
@@ -674,6 +707,10 @@ finish() {
         msg "  systemctl reboot --firmware-setup"
         msg "Then boot into EAC with: sudo eac-setup boot"
     fi
+    if [ -f "$LAUNCHER" ]; then
+        msg "'$LAUNCHER_NAME' in the application menu does the same. It can take until"
+        msg "the next login to show up."
+    fi
     if [ "$BOOT_MANAGER" = systemd-boot ]; then
         msg "You can also select 'CachyOS (EAC)' in the systemd-boot menu."
     elif [ "$BOOT_MANAGER" = grub ] && [ "$GRUB_SAVES_ENTRY" -eq 1 ]; then
@@ -721,5 +758,6 @@ protect_cachyos_files
 install_systemd_boot
 copy_eac_kernel
 write_boot_entry
+create_launcher
 update_grub_menu
 finish
