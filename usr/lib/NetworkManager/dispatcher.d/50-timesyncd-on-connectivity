@@ -1,0 +1,18 @@
+#!/bin/sh
+# Kick systemd-timesyncd as soon as NetworkManager reports full connectivity.
+#
+# timesyncd only follows systemd-networkd link state. With NetworkManager its
+# first attempt at boot fails (no network yet) and the next one comes only after
+# ConnectionRetrySec= (30 s by default), so the clock stays unsynchronized for
+# ~20-30 s after the network is up. That matters when the RTC is off, e.g. after
+# booting Windows, which keeps the RTC in local time: the session starts with the
+# clock an hour off and applications record timestamps from the future.
+# See https://github.com/systemd/systemd/issues/24298
+#
+# try-restart: do nothing when timesyncd is not running (e.g. chrony is used).
+
+[ "$2" = connectivity-change ] || exit 0
+[ "$CONNECTIVITY_STATE" = FULL ] || exit 0
+[ -e /run/systemd/timesync/synchronized ] && exit 0
+
+exec systemctl --no-block try-restart systemd-timesyncd.service
