@@ -211,7 +211,9 @@ on_cmdline() {
 
 check_cmdline() {
     local opt
-    local -a opts=(lockdown=integrity "lsm=landlock,lockdown,yama,integrity,bpf" iommu.passthrough=0)
+    # EAC only checks that the BPF LSM is active (check_kernel does that), so
+    # lsm= isn't compared here and can have other LSMs like selinux on it.
+    local -a opts=(lockdown=integrity iommu.passthrough=0)
 
     # intel_iommu= only exists for Intel VT-d, the AMD IOMMU is on by default
     # and check_iommu verifies the result on every vendor.

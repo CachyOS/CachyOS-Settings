@@ -562,6 +562,35 @@ copy_eac_kernel() {
     msg "Copied the EAC kernel and its initramfs to $(dirname "$ESP$EAC_KERNEL")"
 }
 
+# Keeps the lsm= of the running system and adds whatever's missing from the
+# list in EAC_REQ, so other LSMs like selinux or apparmor stay. EAC only
+# checks that bpf is active.
+eac_lsm() {
+    local opt lsm current=""
+    local -a lsms=()
+
+    for opt in $(< /proc/cmdline); do
+        if [[ "$opt" == lsm=* ]]; then
+            current=${opt#lsm=}
+        fi
+    done
+    for opt in $EAC_REQ; do
+        if [[ "$opt" == lsm=* ]]; then
+            IFS=, read -ra lsms <<< "${opt#lsm=}"
+        fi
+    done
+    if [ -z "$current" ]; then
+        (IFS=,; echo "${lsms[*]}")
+        return
+    fi
+    for lsm in "${lsms[@]}"; do
+        if [[ ",$current," != *",$lsm,"* ]]; then
+            current+=",$lsm"
+        fi
+    done
+    echo "$current"
+}
+
 # The command line of the running system without the options that the boot
 # manager adds and without earlier EAC options, followed by the EAC options
 eac_cmdline() {
@@ -577,7 +606,13 @@ eac_cmdline() {
         done
         opts+=("$opt")
     done
-    echo "${opts[*]} $EAC_REQ"
+    for opt in $EAC_REQ; do
+        if [[ "$opt" == lsm=* ]]; then
+            opt="lsm=$(eac_lsm)"
+        fi
+        opts+=("$opt")
+    done
+    echo "${opts[*]}"
 }
 
 write_boot_entry() {
